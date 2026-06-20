@@ -1,0 +1,21 @@
+data/
+.metals/
+.bsp/
+.scala-build/
+.vscode/
+.scalafmt.conf
+.antigravitycli
+
+# Mac OS
+.DS_Store
+
+# IDEs
+.idea/
+*.iml
+
+# Logs
+*.log
+
+# Build Artifacts
+*.class
+target/
