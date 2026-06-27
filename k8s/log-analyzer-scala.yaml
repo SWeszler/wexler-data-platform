@@ -1,0 +1,52 @@
+apiVersion: sparkoperator.k8s.io/v1beta2
+kind: SparkApplication
+metadata:
+  name: log-analyzer-scala
+  namespace: spark
+spec:
+  type: Scala
+  mode: cluster
+  image: log-analyzer-scala
+  imagePullPolicy: Never
+  mainClass: com.example.SessionAnalysis
+  mainApplicationFile: local:///app/target/app-assembly-0.1.0-SNAPSHOT.jar
+  sparkVersion: "3.5.6"
+  restartPolicy:
+    type: Never
+  deps:
+    packages:
+      - org.apache.hadoop:hadoop-aws:3.3.4
+      - com.amazonaws:aws-java-sdk-bundle:1.12.262
+  sparkConf:
+    spark.executor.extraJavaOptions: "-agentlib:jdwp=transport=dt_socket,server=y,suspend=y,address=*:5005"
+    spark.jars.ivy: /tmp/.ivy2
+    spark.sql.catalogImplementation: hive
+    spark.sql.warehouse.dir: s3a://warehouse/spark-warehouse
+    spark.hadoop.hive.metastore.uris: thrift://hive-metastore.data.svc.cluster.local:9083
+    spark.hadoop.fs.s3a.endpoint: http://minio.data.svc.cluster.local:9000
+    spark.hadoop.fs.s3a.access.key: minioadmin
+    spark.hadoop.fs.s3a.secret.key: minioadmin
+    spark.hadoop.fs.s3a.path.style.access: "true"
+    spark.hadoop.fs.s3a.connection.ssl.enabled: "false"
+    spark.hadoop.fs.s3a.impl: org.apache.hadoop.fs.s3a.S3AFileSystem
+    spark.hadoop.fs.s3a.aws.credentials.provider: org.apache.hadoop.fs.s3a.SimpleAWSCredentialsProvider
+  arguments:
+    - --input
+    - s3a://logs/web_server_logs.txt
+    - --hiveDb
+    - default
+    - --outputBase
+    - s3a://warehouse/output/sessionization
+    - --overwrite
+  driver:
+    cores: 1
+    memory: 1g
+    serviceAccount: spark
+    ports:
+      - name: debug
+        containerPort: 5005
+        protocol: TCP
+  executor:
+    cores: 1
+    instances: 1
+    memory: 1g

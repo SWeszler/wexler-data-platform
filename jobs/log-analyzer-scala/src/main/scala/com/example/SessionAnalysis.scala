@@ -11,10 +11,11 @@ object SessionAnalysis {
   val clfRegex = """^(\S+) (\S+) (\S+) \[(.*?)\] \"(.*?)\" (\d{3}) (\S+)""".r
 
   case class Config(
-    input: String = "/data/logs/web_server_logs.txt",
+    input: String = "s3a://logs/web_server_logs.txt",
     hiveDb: String = "default",
     sessionGapMinutes: Int = 30,
     outputFormat: String = "parquet",
+    outputBase: String = "s3a://warehouse/output/sessionization",
     overwrite: Boolean = false
   )
 
@@ -25,6 +26,7 @@ object SessionAnalysis {
       opt[String]("hiveDb").action((x, c) => c.copy(hiveDb = x)).text("Hive database name (default: default)")
       opt[Int]("sessionGapMinutes").action((x, c) => c.copy(sessionGapMinutes = x)).text("Session gap in minutes")
       opt[String]("outputFormat").action((x, c) => c.copy(outputFormat = x)).text("Output format (parquet, etc)")
+      opt[String]("outputBase").action((x, c) => c.copy(outputBase = x)).text("Base path for direct output copies")
       opt[Unit]("overwrite").action((_, c) => c.copy(overwrite = true)).text("Overwrite output")
     }
 
@@ -112,9 +114,8 @@ object SessionAnalysis {
     summaryWithMeta.write.mode(mode).partitionBy("job_run_date").format("parquet").saveAsTable(s"${config.hiveDb}.session_summary")
 
     // Also write Parquet to HDFS path for convenience (partitioned)
-    val outBase = "/data/output/sessionization"
-    sessionsWithMeta.write.mode(mode).partitionBy("job_run_date").parquet(s"$outBase/sessions")
-    summaryWithMeta.write.mode(mode).partitionBy("job_run_date").parquet(s"$outBase/summary")
+    sessionsWithMeta.write.mode(mode).partitionBy("job_run_date").parquet(s"${config.outputBase}/sessions")
+    summaryWithMeta.write.mode(mode).partitionBy("job_run_date").parquet(s"${config.outputBase}/summary")
 
     // Show result
     summaryWithMeta.show(false)

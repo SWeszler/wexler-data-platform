@@ -24,6 +24,12 @@ sbt assembly
 docker build --platform linux/amd64 -t log-analyzer-scala .
 ```
 
+#### Upload the image into minikube:
+
+```bash
+minikube image load log-analyzer-scala
+```
+
 Run in client deploy mode. The driver runs inside the temporary
 `log-analyzer-scala` submit container, while executors run on the Spark workers.
 
@@ -64,3 +70,9 @@ Master UI at `http://localhost:8080/` and the worker/driver logs.
 - Parquet: `/data/output/sessionization/` (partitioned by job_run_date)
 
 Note: Each run adds job_run_id (UUID), created_at, updated_at, and job_run_date columns; tables are partitioned by job_run_date.
+
+### Debug JVM
+
+```bash
+kubectl port-forward pod/$(kubectl get pods -n spark --no-headers -o custom-columns=":metadata.name" | grep -Ei "sessionanalysis.*exec.*" | head -n 1) 5005:5005 -n spark
+```

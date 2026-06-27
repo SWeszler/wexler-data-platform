@@ -1,0 +1,422 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hive-metastore-postgresql
+  namespace: data
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: hive-metastore-postgresql
+  template:
+    metadata:
+      labels:
+        app: hive-metastore-postgresql
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:15
+          env:
+            - name: POSTGRES_DB
+              value: metastore
+            - name: POSTGRES_USER
+              value: hive
+            - name: POSTGRES_PASSWORD
+              value: hive
+          ports:
+            - name: postgres
+              containerPort: 5432
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: hive-metastore-postgresql
+  namespace: data
+spec:
+  selector:
+    app: hive-metastore-postgresql
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: postgres
+
+---
+# hive-site.xml mounted directly — no cp needed, avoids permission issues
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: hive-site
+  namespace: data
+data:
+  hive-site.xml: |
+    <?xml version="1.0" encoding="UTF-8" standalone="no"?>
+    <?xml-stylesheet type="text/xsl" href="configuration.xsl"?>
+    <configuration>
+        <property>
+            <name>javax.jdo.option.ConnectionURL</name>
+            <value>jdbc:postgresql://hive-metastore-postgresql/metastore</value>
+        </property>
+        <property>
+            <name>javax.jdo.option.ConnectionDriverName</name>
+            <value>org.postgresql.Driver</value>
+        </property>
+        <property>
+            <name>javax.jdo.option.ConnectionUserName</name>
+            <value>hive</value>
+        </property>
+        <property>
+            <name>javax.jdo.option.ConnectionPassword</name>
+            <value>hive</value>
+        </property>
+        <property>
+            <name>datanucleus.schema.autoCreateAll</name>
+            <value>true</value>
+        </property>
+        <property>
+            <name>hive.metastore.schema.verification</name>
+            <value>false</value>
+        </property>
+        <property>
+            <name>hive.metastore.uris</name>
+            <value>thrift://hive-metastore:9083</value>
+        </property>
+        <property>
+            <name>hive.metastore.warehouse.dir</name>
+            <value>s3a://warehouse/hive</value>
+        </property>
+        <property>
+            <name>hive.exec.scratchdir</name>
+            <value>s3a://warehouse/hive-scratch</value>
+        </property>
+        <property>
+            <name>hive.security.authorization.enabled</name>
+            <value>false</value>
+        </property>
+        <property>
+            <name>fs.s3a.impl</name>
+            <value>org.apache.hadoop.fs.s3a.S3AFileSystem</value>
+        </property>
+        <property>
+            <name>fs.s3a.endpoint</name>
+            <value>http://minio:9000</value>
+        </property>
+        <property>
+            <name>fs.s3a.access.key</name>
+            <value>minioadmin</value>
+        </property>
+        <property>
+            <name>fs.s3a.secret.key</name>
+            <value>minioadmin</value>
+        </property>
+        <property>
+            <name>fs.s3a.path.style.access</name>
+            <value>true</value>
+        </property>
+        <property>
+            <name>fs.s3a.connection.ssl.enabled</name>
+            <value>false</value>
+        </property>
+        <!-- Prevent metastore from touching S3 at startup -->
+        <property>
+            <name>hive.metastore.try.direct.sql</name>
+            <value>true</value>
+        </property>
+        <property>
+            <name>hive.metastore.try.direct.sql.ddl</name>
+            <value>true</value>
+        </property>
+        <!-- Do not attempt to create/verify warehouse dir on startup -->
+        <property>
+            <name>hive.metastore.warehouse.dir.check</name>
+            <value>false</value>
+        </property>
+        <!-- Local single-user metastore: allow HS2 notification polling without proxy-user ACLs. -->
+        <property>
+            <name>metastore.metastore.event.db.notification.api.auth</name>
+            <value>false</value>
+        </property>
+        <property>
+            <name>hive.server2.enable.doAs</name>
+            <value>false</value>
+        </property>
+        <property>
+            <name>hive.server2.thrift.bind.host</name>
+            <value>0.0.0.0</value>
+        </property>
+        <property>
+            <name>hive.server2.thrift.port</name>
+            <value>10000</value>
+        </property>
+        <property>
+            <name>hive.server2.transport.mode</name>
+            <value>binary</value>
+        </property>
+        <property>
+            <name>hive.server2.authentication</name>
+            <value>NOSASL</value>
+        </property>
+        <!-- Disable S3A bucket existence check which can hang -->
+        <property>
+            <name>fs.s3a.bucket.probe</name>
+            <value>0</value>
+        </property>
+        <!-- Faster S3A failure instead of hanging -->
+        <property>
+            <name>fs.s3a.connection.timeout</name>
+            <value>5000</value>
+        </property>
+        <property>
+            <name>fs.s3a.attempts.maximum</name>
+            <value>3</value>
+        </property>
+    </configuration>
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hive-metastore
+  namespace: data
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: hive-metastore
+  template:
+    metadata:
+      labels:
+        app: hive-metastore
+    spec:
+      initContainers:
+        - name: wait-for-postgres
+          image: busybox:1.36
+          command:
+            - sh
+            - -c
+            - |
+              until nc -z hive-metastore-postgresql 5432; do
+                echo "Waiting for PostgreSQL..."; sleep 3;
+              done
+
+        # Download JDBC and S3A jars that are not bundled in apache/hive:4.0.0.
+        # Remove this once the Hive image is replaced by a project-owned image with these jars baked in.
+        - name: download-hive-extra-jars
+          image: busybox:1.36
+          command:
+            - sh
+            - -c
+            - |
+              set -eu
+              wget -q https://jdbc.postgresql.org/download/postgresql-42.7.3.jar -O /opt/hive/auxlib/postgresql.jar
+              wget -q https://repo1.maven.org/maven2/org/apache/hadoop/hadoop-aws/3.3.6/hadoop-aws-3.3.6.jar -O /opt/hive/auxlib/hadoop-aws.jar
+              wget -q https://repo1.maven.org/maven2/com/amazonaws/aws-java-sdk-bundle/1.12.367/aws-java-sdk-bundle-1.12.367.jar -O /opt/hive/auxlib/aws-java-sdk-bundle.jar
+              ls -lh /opt/hive/auxlib
+          volumeMounts:
+            - name: hive-extra-jars
+              mountPath: /opt/hive/auxlib
+
+        # Initialize the schema — runs after the driver is in place
+        - name: schematool-init
+          image: apache/hive:4.0.0
+          command:
+            - sh
+            - -c
+            - |
+              /opt/hive/bin/schematool \
+                -dbType postgres \
+                -url "jdbc:postgresql://hive-metastore-postgresql/metastore" \
+                -driver org.postgresql.Driver \
+                -userName hive \
+                -passWord hive \
+                -initSchema \
+                --verbose
+              EXIT=$?
+              # exit 0 = initialized, exit 1 with "already exists" is also fine
+              if [ $EXIT -ne 0 ]; then
+                echo "schematool exited $EXIT — checking if schema already exists..."
+                /opt/hive/bin/schematool \
+                  -dbType postgres \
+                  -url "jdbc:postgresql://hive-metastore-postgresql/metastore" \
+                  -driver org.postgresql.Driver \
+                  -userName hive \
+                  -passWord hive \
+                  -info && echo "Schema OK, continuing." || exit 1
+              fi
+          env:
+            - name: HADOOP_CLASSPATH
+              value: "/opt/hive/auxlib/*"
+            - name: HIVE_AUX_JARS_PATH
+              value: "/opt/hive/auxlib"
+          volumeMounts:
+            - name: hive-extra-jars
+              mountPath: /opt/hive/auxlib
+            # hive-site.xml mounted directly — no cp, no permission issue
+            - name: hive-site
+              mountPath: /opt/hive/conf/hive-site.xml
+              subPath: hive-site.xml
+
+      containers:
+        - name: hive-metastore
+          image: apache/hive:4.0.0
+          command:
+            - sh
+            - -c
+            - |
+              exec /opt/hive/bin/hive --service metastore
+          env:
+            - name: HADOOP_CLASSPATH
+              value: "/opt/hive/auxlib/*"
+            - name: HIVE_AUX_JARS_PATH
+              value: "/opt/hive/auxlib"
+          ports:
+            - name: metastore
+              containerPort: 9083
+          volumeMounts:
+            - name: hive-extra-jars
+              mountPath: /opt/hive/auxlib
+            - name: hive-site
+              mountPath: /opt/hive/conf/hive-site.xml
+              subPath: hive-site.xml
+          resources:
+            requests:
+              cpu: 200m
+              memory: 512Mi
+            limits:
+              cpu: 1000m
+              memory: 1Gi
+      volumes:
+        - name: hive-extra-jars
+          emptyDir: {}
+        - name: hive-site
+          configMap:
+            name: hive-site
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: hive-metastore
+  namespace: data
+spec:
+  selector:
+    app: hive-metastore
+  ports:
+    - name: metastore
+      port: 9083
+      targetPort: metastore
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hive-server
+  namespace: data
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: hive-server
+  template:
+    metadata:
+      labels:
+        app: hive-server
+    spec:
+      initContainers:
+        - name: wait-for-metastore
+          image: busybox:1.36
+          command:
+            - sh
+            - -c
+            - |
+              until nc -z hive-metastore 9083; do
+                echo "Waiting for Hive Metastore..."; sleep 3;
+              done
+
+        - name: download-hive-extra-jars
+          image: busybox:1.36
+          command:
+            - sh
+            - -c
+            - |
+              set -eu
+              wget -q https://jdbc.postgresql.org/download/postgresql-42.7.3.jar -O /opt/hive/auxlib/postgresql.jar
+              wget -q https://repo1.maven.org/maven2/org/apache/hadoop/hadoop-aws/3.3.6/hadoop-aws-3.3.6.jar -O /opt/hive/auxlib/hadoop-aws.jar
+              wget -q https://repo1.maven.org/maven2/com/amazonaws/aws-java-sdk-bundle/1.12.367/aws-java-sdk-bundle-1.12.367.jar -O /opt/hive/auxlib/aws-java-sdk-bundle.jar
+              ls -lh /opt/hive/auxlib
+          volumeMounts:
+            - name: hive-extra-jars
+              mountPath: /opt/hive/auxlib
+
+      containers:
+        - name: hive-server
+          image: apache/hive:4.0.0
+          command:
+            - sh
+            - -c
+            - |
+              exec /opt/hive/bin/hive --service hiveserver2
+          env:
+            - name: HADOOP_CLASSPATH
+              value: "/opt/hive/auxlib/*"
+            - name: HIVE_AUX_JARS_PATH
+              value: "/opt/hive/auxlib"
+          ports:
+            - name: hiveserver2
+              containerPort: 10000
+            - name: webui
+              containerPort: 10002
+          readinessProbe:
+            tcpSocket:
+              port: hiveserver2
+            initialDelaySeconds: 20
+            periodSeconds: 5
+            failureThreshold: 24
+          livenessProbe:
+            tcpSocket:
+              port: hiveserver2
+            initialDelaySeconds: 60
+            periodSeconds: 10
+            failureThreshold: 6
+          volumeMounts:
+            - name: hive-extra-jars
+              mountPath: /opt/hive/auxlib
+            - name: hive-site
+              mountPath: /opt/hive/conf/hive-site.xml
+              subPath: hive-site.xml
+          resources:
+            requests:
+              cpu: 200m
+              memory: 512Mi
+            limits:
+              cpu: 1000m
+              memory: 1Gi
+      volumes:
+        - name: hive-extra-jars
+          emptyDir: {}
+        - name: hive-site
+          configMap:
+            name: hive-site
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: hive-server
+  namespace: data
+spec:
+  selector:
+    app: hive-server
+  ports:
+    - name: hiveserver2
+      port: 10000
+      targetPort: hiveserver2
+    - name: webui
+      port: 10002
+      targetPort: webui

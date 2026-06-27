@@ -16,12 +16,12 @@ WORKDIR /app
 
 ARG SPARK_RUNTIME_VERSION=3.0.0
 ARG SPARK_RUNTIME_PACKAGE=spark-${SPARK_RUNTIME_VERSION}-bin-hadoop3.2
-ENV SPARK_HOME=/opt/spark-${SPARK_RUNTIME_VERSION}
+ENV SPARK_LEGACY_HOME=/opt/spark-${SPARK_RUNTIME_VERSION}
 
-RUN mkdir -p "${SPARK_HOME}" \
+RUN mkdir -p "${SPARK_LEGACY_HOME}" \
 	&& curl -fsSL "https://archive.apache.org/dist/spark/spark-${SPARK_RUNTIME_VERSION}/${SPARK_RUNTIME_PACKAGE}.tgz" \
-		| tar -xz -C "${SPARK_HOME}" --strip-components=1 \
-	&& chown -R 185:185 "${SPARK_HOME}"
+		| tar -xz -C "${SPARK_LEGACY_HOME}" --strip-components=1 \
+	&& chown -R 185:185 "${SPARK_LEGACY_HOME}"
 
 # Copy assembled jar from builder
 COPY --from=builder /app/target/scala-2.12/*-assembly-*.jar /app/target/
@@ -31,9 +31,10 @@ COPY run.sh submit-client.sh submit-cluster.sh /
 RUN chmod +x /run.sh /submit-client.sh /submit-cluster.sh
 COPY hive-site.xml /opt/spark-3.0.0/conf/hive-site.xml
 COPY spark-defaults.conf /opt/spark-3.0.0/conf/spark-defaults.conf
+RUN chown -R 185:185 /app
 
 ENV SPARK_APPLICATION_MAIN_CLASS=com.example.SessionAnalysis
 
 USER 185
-ENTRYPOINT []
+ENTRYPOINT ["/opt/entrypoint.sh"]
 CMD ["/run.sh"]
