@@ -9,6 +9,16 @@ stringData:
   MINIO_ROOT_PASSWORD: minioadmin
 ---
 apiVersion: v1
+kind: Secret
+metadata:
+  name: minio-root
+  namespace: spark
+type: Opaque
+stringData:
+  MINIO_ROOT_USER: minioadmin
+  MINIO_ROOT_PASSWORD: minioadmin
+---
+apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: minio-data

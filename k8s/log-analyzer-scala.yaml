@@ -18,18 +18,15 @@ spec:
       - org.apache.hadoop:hadoop-aws:3.3.4
       - com.amazonaws:aws-java-sdk-bundle:1.12.262
   sparkConf:
-    spark.executor.extraJavaOptions: "-agentlib:jdwp=transport=dt_socket,server=y,suspend=y,address=*:5005"
     spark.jars.ivy: /tmp/.ivy2
     spark.sql.catalogImplementation: hive
     spark.sql.warehouse.dir: s3a://warehouse/spark-warehouse
     spark.hadoop.hive.metastore.uris: thrift://hive-metastore.data.svc.cluster.local:9083
     spark.hadoop.fs.s3a.endpoint: http://minio.data.svc.cluster.local:9000
-    spark.hadoop.fs.s3a.access.key: minioadmin
-    spark.hadoop.fs.s3a.secret.key: minioadmin
     spark.hadoop.fs.s3a.path.style.access: "true"
     spark.hadoop.fs.s3a.connection.ssl.enabled: "false"
     spark.hadoop.fs.s3a.impl: org.apache.hadoop.fs.s3a.S3AFileSystem
-    spark.hadoop.fs.s3a.aws.credentials.provider: org.apache.hadoop.fs.s3a.SimpleAWSCredentialsProvider
+    spark.hadoop.fs.s3a.aws.credentials.provider: com.amazonaws.auth.EnvironmentVariableCredentialsProvider
   arguments:
     - --input
     - s3a://logs/web_server_logs.txt
@@ -42,11 +39,21 @@ spec:
     cores: 1
     memory: 1g
     serviceAccount: spark
-    ports:
-      - name: debug
-        containerPort: 5005
-        protocol: TCP
+    envSecretKeyRefs:
+      AWS_ACCESS_KEY_ID:
+        name: minio-root
+        key: MINIO_ROOT_USER
+      AWS_SECRET_ACCESS_KEY:
+        name: minio-root
+        key: MINIO_ROOT_PASSWORD
   executor:
     cores: 1
     instances: 1
     memory: 1g
+    envSecretKeyRefs:
+      AWS_ACCESS_KEY_ID:
+        name: minio-root
+        key: MINIO_ROOT_USER
+      AWS_SECRET_ACCESS_KEY:
+        name: minio-root
+        key: MINIO_ROOT_PASSWORD

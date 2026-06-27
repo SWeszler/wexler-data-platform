@@ -124,25 +124,7 @@ kubectl get pods -n data --watch
 Seed the log file into MinIO:
 
 ```bash
-kubectl run minio-client -n data \
-  --image=minio/mc \
-  --restart=Never \
-  --command -- sleep 3600
-
-kubectl wait -n data --for=condition=Ready pod/minio-client --timeout=120s
-
-kubectl exec -i -n data minio-client -- \
-  sh -c 'cat > /tmp/web_server_logs.txt' \
-  < ./jobs/log-analyzer-scala/log-generator/web_server_logs.txt
-
-kubectl exec -n data minio-client -- \
-  mc alias set local http://minio:9000 minioadmin minioadmin
-
-kubectl exec -n data minio-client -- \
-  mc mb -p local/logs local/warehouse
-
-kubectl exec -n data minio-client -- \
-  mc cp /tmp/web_server_logs.txt local/logs/web_server_logs.txt
+./k8s/seed-minio.sh
 ```
 
 Build and load the Scala job image into minikube:
@@ -166,13 +148,50 @@ kubectl logs -n spark log-analyzer-scala-driver
 DataGrip connections:
 
 ```bash
-kubectl port-forward -n data svc/hive-server 10000:10000
+kubectl port-forward deployment/hive-server --address localhost 10000:10000 -n data
 kubectl port-forward -n data svc/trino 8089:8080
 ```
 
-- Hive JDBC: `jdbc:hive2://localhost:10000`
+- Hive JDBC: `jdbc:hive2://localhost:10000/default;auth=noSasl`
 - Trino JDBC: `jdbc:trino://localhost:8089/hive/default`
 - MinIO console: `kubectl port-forward -n data svc/minio 9001:9001`, then open `http://localhost:9001`
+
+Hive DataGrip settings:
+
+- Host: `localhost`
+- Port: `10000`
+- Database: `default`
+- URL: `jdbc:hive2://localhost:10000/default;auth=noSasl`
+- Authentication: no authentication / anonymous
+
+If DataGrip starts its own Kubernetes port-forward, use the same target:
+
+```bash
+kubectl port-forward deployment/hive-server --address localhost 10000:10000 --namespace=data
+```
+
+If the port-forward connects and then immediately drops with `socat ... connect ... 127.0.0.1:10000: Connection refused`, HiveServer2 is not listening inside the pod. Check:
+
+```bash
+kubectl get pods -n data -l app=hive-server
+kubectl logs -n data deploy/hive-server --tail=120
+kubectl exec -n data deploy/hive-server -- \
+  /opt/hive/bin/beeline -u 'jdbc:hive2://127.0.0.1:10000/default;auth=noSasl' -n hive -e 'show databases'
+```
+
+---
+
+## Remaining migration work
+
+The Kubernetes path now covers Spark Operator, MinIO object storage, Hive metastore, HiveServer2, Trino, and the Scala log analyzer. Remaining work before treating it as the default platform:
+
+- Add PVCs or backup/restore notes for Hive metastore PostgreSQL and MinIO so cluster recreation does not lose metadata or object data unexpectedly.
+- Update `jobs/log-analyzer-scala/README.md` to document the Kubernetes/S3A workflow and current defaults, because it still focuses on Docker/HDFS.
+- Add Spark history/event logging for completed SparkApplication runs if job debugging needs to survive driver pod cleanup.
+- Decide whether HiveServer2 and Trino should stay port-forward-only for local development or get NodePort/Ingress manifests for stable DataGrip endpoints.
+- Add health checks or smoke-test commands to the roadmap for MinIO, Hive metastore, HiveServer2, Trino, and the log analyzer job.
+- Pin and document the Spark Operator Helm repository/chart version used by the cluster, then keep `k8s/spark-pi.yaml` aligned with that Spark version.
+- Decide whether legacy HDFS/YARN components are intentionally retired in Kubernetes or need replacement manifests. The current Kubernetes design is MinIO-first and does not deploy HDFS, YARN, NameNode, DataNode, ResourceManager, NodeManager, or Hadoop HistoryServer.
 
 ---
 
