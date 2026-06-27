@@ -19,6 +19,8 @@ spec:
       - com.amazonaws:aws-java-sdk-bundle:1.12.262
   sparkConf:
     spark.jars.ivy: /tmp/.ivy2
+    spark.eventLog.enabled: "true"
+    spark.eventLog.dir: s3a://warehouse/spark-events
     spark.sql.catalogImplementation: hive
     spark.sql.warehouse.dir: s3a://warehouse/spark-warehouse
     spark.hadoop.hive.metastore.uris: thrift://hive-metastore.data.svc.cluster.local:9083

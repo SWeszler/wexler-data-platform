@@ -1,0 +1,131 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: spark-history-server
+  namespace: spark
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: spark-history-server
+  template:
+    metadata:
+      labels:
+        app: spark-history-server
+    spec:
+      initContainers:
+        # Download S3A jars that are not bundled in the stock Spark image.
+        # Remove this once the history server uses a project-owned image with these jars baked in.
+        - name: download-s3a-jars
+          image: busybox:1.36
+          command:
+            - sh
+            - -c
+            - |
+              set -eu
+              wget -q https://repo1.maven.org/maven2/org/apache/hadoop/hadoop-aws/3.3.4/hadoop-aws-3.3.4.jar -O /opt/spark/extra-jars/hadoop-aws.jar
+              wget -q https://repo1.maven.org/maven2/com/amazonaws/aws-java-sdk-bundle/1.12.262/aws-java-sdk-bundle-1.12.262.jar -O /opt/spark/extra-jars/aws-java-sdk-bundle.jar
+              ls -lh /opt/spark/extra-jars
+          volumeMounts:
+            - name: spark-extra-jars
+              mountPath: /opt/spark/extra-jars
+        # Create placeholder file in spark-events directory so it persists in S3
+        - name: init-s3-dirs
+          image: minio/mc:latest
+          command:
+            - sh
+            - -c
+            - |
+              set -eu
+              mc alias set minio http://minio.data.svc.cluster.local:9000 "$MINIO_USER" "$MINIO_PASS" --api S3v4
+              mc mb minio/warehouse --ignore-existing
+              echo ".placeholder" | mc pipe minio/warehouse/spark-events/.placeholder
+              echo ".placeholder" | mc pipe minio/warehouse/spark-warehouse/.placeholder
+          env:
+            - name: MINIO_USER
+              valueFrom:
+                secretKeyRef:
+                  name: minio-root
+                  key: MINIO_ROOT_USER
+            - name: MINIO_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: minio-root
+                  key: MINIO_ROOT_PASSWORD
+      containers:
+        - name: spark-history-server
+          image: apache/spark:3.5.6-scala2.12-java11-python3-ubuntu
+          command:
+            - sh
+            - -c
+            - |
+              export SPARK_NO_DAEMONIZE=true
+              exec /opt/spark/sbin/start-history-server.sh
+          env:
+            - name: SPARK_DIST_CLASSPATH
+              value: "/opt/spark/extra-jars/*"
+            - name: SPARK_HISTORY_OPTS
+              value: >-
+                -Dspark.history.fs.logDirectory=s3a://warehouse/spark-events
+                -Dspark.history.ui.port=18080
+                -Dspark.hadoop.fs.s3a.endpoint=http://minio.data.svc.cluster.local:9000
+                -Dspark.hadoop.fs.s3a.path.style.access=true
+                -Dspark.hadoop.fs.s3a.connection.ssl.enabled=false
+                -Dspark.hadoop.fs.s3a.impl=org.apache.hadoop.fs.s3a.S3AFileSystem
+                -Dspark.hadoop.fs.s3a.aws.credentials.provider=com.amazonaws.auth.EnvironmentVariableCredentialsProvider
+                -Dspark.history.fs.cleaner.enabled=false
+                -Dspark.hadoop.fs.s3a.path.style.access=true
+                -Dspark.hadoop.fs.s3a.create.bucket=true
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: minio-root
+                  key: MINIO_ROOT_USER
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: minio-root
+                  key: MINIO_ROOT_PASSWORD
+          ports:
+            - name: web
+              containerPort: 18080
+          readinessProbe:
+            httpGet:
+              path: /
+              port: web
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            failureThreshold: 12
+          livenessProbe:
+            httpGet:
+              path: /
+              port: web
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            failureThreshold: 4
+          volumeMounts:
+            - name: spark-extra-jars
+              mountPath: /opt/spark/extra-jars
+          resources:
+            requests:
+              cpu: 100m
+              memory: 512Mi
+            limits:
+              cpu: 500m
+              memory: 1Gi
+      volumes:
+        - name: spark-extra-jars
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: spark-history-server
+  namespace: spark
+spec:
+  selector:
+    app: spark-history-server
+  ports:
+    - name: web
+      port: 18080
+      targetPort: web

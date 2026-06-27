@@ -1,57 +1,147 @@
-# Docker multi-container environment with Hadoop, Spark and Hive
+# Kubernetes data platform with Spark, MinIO, Hive, and Trino
 
-This is it: a Docker multi-container environment with Hadoop (HDFS), Spark and Hive. But without the large memory requirements of a Cloudera sandbox. (On my Windows 10 laptop (with WSL2) it seems to consume a mere 3 GB.)
+This repository is being migrated to a Minikube-based data platform using Spark Operator for Spark jobs, MinIO for object storage, Hive Metastore and HiveServer2 for metadata/JDBC access, and Trino for interactive SQL.
 
-The only thing lacking, is that Hive server doesn't start automatically. To be added when I understand how to do that in docker-compose.
+The Kubernetes target is MinIO-first. It does not deploy Hadoop, HDFS, or YARN.
+
+## Kubernetes Cluster Setup
+
+The current Kubernetes target is Minikube with Spark Operator, MinIO, Hive Metastore, HiveServer2, Trino, and the Scala log analyzer job. Storage is MinIO-first; HDFS and YARN are not deployed in Kubernetes.
+
+Install local tooling:
+
+```bash
+brew install minikube kubectl helm
+```
+
+Start Minikube:
+
+```bash
+minikube start \
+  --cpus=4 \
+  --memory=11264 \
+  --disk-size=60g \
+  --driver=docker
+```
+
+Create namespaces and the Spark service account:
+
+```bash
+kubectl apply -f ./k8s/platform/namespaces.yaml
+```
+
+Install Spark Operator:
+
+```bash
+helm repo add spark-operator https://kubeflow.github.io/spark-operator
+helm repo update
+
+helm upgrade --install spark-operator spark-operator/spark-operator \
+  --namespace spark \
+  --version 2.5.1 \
+  --set 'spark.jobNamespaces={spark}' \
+  --set webhook.enable=true
+```
+
+Deploy the data and query services:
+
+```bash
+kubectl apply -f ./k8s/platform/minio.yaml
+kubectl apply -f ./k8s/platform/hive.yaml
+kubectl apply -f ./k8s/platform/trino.yaml
+kubectl apply -f ./k8s/platform/spark-history.yaml
+
+kubectl get pods -n data --watch
+```
+
+Upload input data through the MinIO Console:
+
+```bash
+kubectl port-forward -n data svc/minio 9001:9001
+```
+
+Open `http://localhost:9001`, sign in with `minioadmin` / `minioadmin`, create the `logs` bucket if needed, and upload `jobs/log-analyzer-scala/log-generator/web_server_logs.txt` as `web_server_logs.txt`. The Spark job reads it from `s3a://logs/web_server_logs.txt`.
+
+Build and load the Scala job image into Minikube:
+
+```bash
+docker build --platform linux/arm64 -t log-analyzer-scala ./jobs/log-analyzer-scala
+minikube image load log-analyzer-scala
+```
+
+Run the job through Spark Operator:
+
+```bash
+kubectl apply -f ./k8s/log-analyzer-scala.yaml
+kubectl get sparkapplication -n spark --watch
+kubectl logs -n spark log-analyzer-scala-driver
+```
+
+Local connections:
+
+```bash
+kubectl port-forward deployment/hive-server --address localhost 10000:10000 -n data
+kubectl port-forward -n data svc/trino 8089:8080
+kubectl port-forward -n spark svc/spark-history-server 18080:18080
+```
+
+- Hive JDBC: `jdbc:hive2://localhost:10000/default;auth=noSasl`
+- Trino JDBC: `jdbc:trino://localhost:8089/hive/default`
+- MinIO Console: `http://localhost:9001`
+- Spark History Server: `http://localhost:18080`
+
+For the detailed migration notes and remaining work, see `roadmap/migrate_to_k8s.md`.
 
 ## Architecture Overview
 
-Here is a visual breakdown of all the containers running in this environment and exactly what their roles are:
+The current Kubernetes architecture is:
 
 ```mermaid
 graph TD
-    subgraph HDFS ["Hadoop Distributed File System (Storage)"]
-        NN[namenode<br/>Master: Manages file metadata & directory tree]
-        DN[datanode<br/>Worker: Stores the actual data blocks]
-        NN --- DN
+    subgraph K8S ["Minikube Kubernetes Cluster"]
+        SO[Spark Operator]
+        SA[SparkApplication<br/>log-analyzer-scala]
+        DR[Spark driver pod]
+        EX[Spark executor pod]
+
+        subgraph DATA ["data namespace"]
+            MINIO[MinIO<br/>S3-compatible object storage]
+            HMS[Hive Metastore<br/>Thrift 9083]
+            HS2[HiveServer2<br/>JDBC 10000]
+            PG[(PostgreSQL<br/>metastore DB)]
+            TRINO[Trino<br/>SQL engine]
+        end
+
+        SHS[Spark History Server<br/>UI 18080]
     end
 
-    subgraph YARN ["Hadoop YARN (Resource Management)"]
-        RM[resourcemanager<br/>Master: Allocates cluster resources]
-        NM[nodemanager<br/>Worker: Runs containers & jobs]
-        HS[historyserver<br/>UI: Keeps history of finished jobs]
-        RM --- NM
-        RM -.-> HS
-    end
+    USER[DataGrip / Browser]
 
-    subgraph SPARK ["Apache Spark (Compute Engine)"]
-        SM[spark-master<br/>Master: Manages Spark applications]
-        SW[spark-worker-1<br/>Worker: Executes Spark tasks in memory]
-        SM --- SW
-    end
-
-    subgraph HIVE ["Apache Hive (Data Warehouse)"]
-        HS2[hive-server<br/>SQL Interface for batch queries]
-        HM[hive-metastore<br/>Stores table schemas & locations]
-        PG[(hive-metastore-postgresql<br/>Relational DB holding metadata)]
-        HS2 --> HM
-        HM --> PG
-    end
-
-    subgraph PRESTO ["Presto (Fast SQL Engine)"]
-        PC[presto-coordinator<br/>Interactive SQL queries in-memory]
-    end
-
-    %% Key Data Flows
-    SM -. "Reads/Writes" .-> NN
-    NM -. "Accesses Data" .-> NN
-    HS2 -. "Reads/Writes" .-> NN
-    PC -. "Gets Schemas" .-> HM
-    PC -. "Reads Data directly" .-> NN
+    SO --> SA
+    SA --> DR
+    DR --> EX
+    DR -. "reads/writes s3a://" .-> MINIO
+    EX -. "reads/writes s3a://" .-> MINIO
+    DR --> HMS
+    DR -. "event logs s3a://warehouse/spark-events" .-> MINIO
+    SHS -. "reads event logs" .-> MINIO
+    HMS --> PG
+    HS2 --> HMS
+    HS2 -. "table data on s3a://" .-> MINIO
+    TRINO --> HMS
+    TRINO -. "table data on s3://" .-> MINIO
+    USER -. "port-forward 10000" .-> HS2
+    USER -. "port-forward 8089" .-> TRINO
+    USER -. "port-forward 9001" .-> MINIO
+    USER -. "port-forward 18080" .-> SHS
 ```
 
 
-## Quick Start
+## Legacy Docker Compose Reference
+
+The Docker Compose stack in this repository is the older Hadoop/HDFS/YARN-based local environment. The active Kubernetes migration does not use Hadoop services.
+
+### Quick Start
 
 To deploy the HDFS-Spark-Hive cluster, run:
 ```

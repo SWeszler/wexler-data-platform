@@ -47,11 +47,12 @@ kubectl create clusterrolebinding spark-role \
 
 ```bash
 helm repo add spark-operator \
-  https://googlecloudplatform.github.io/spark-on-k8s-operator
+  https://kubeflow.github.io/spark-operator
 helm repo update
 
 helm install spark-operator spark-operator/spark-operator \
   --namespace spark \
+  --version 2.5.1 \
   --set spark.jobNamespaces={spark} \
   --set webhook.enable=true
 
@@ -116,25 +117,30 @@ kubectl apply -f ./k8s/platform/namespaces.yaml
 kubectl apply -f ./k8s/platform/minio.yaml
 kubectl apply -f ./k8s/platform/hive.yaml
 kubectl apply -f ./k8s/platform/trino.yaml
+kubectl apply -f ./k8s/platform/spark-history.yaml
 
 kubectl get pods -n data --watch
 # Ctrl+C once minio, hive-metastore, hive-server, and trino are Running
 ```
 
-Seed the log file into MinIO:
+Upload the log file through the MinIO Console:
 
 ```bash
-./k8s/seed-minio.sh
+kubectl port-forward -n data svc/minio 9001:9001
 ```
+
+Open `http://localhost:9001`, sign in with `minioadmin` / `minioadmin`, create the `logs` bucket if needed, and upload `jobs/log-analyzer-scala/log-generator/web_server_logs.txt` as `web_server_logs.txt`.
+
+The Spark job reads it from `s3a://logs/web_server_logs.txt`.
 
 Build and load the Scala job image into minikube:
 
 ```bash
-docker build --platform linux/arm64 -t log-analyzer-scala:k8s ./jobs/log-analyzer-scala
+docker build --platform linux/arm64 -t log-analyzer-scala ./jobs/log-analyzer-scala
 ```
 
 ```bash
-minikube image load log-analyzer-scala:k8s
+minikube image load log-analyzer-scala
 ```
 
 Run the job through Spark Operator:
@@ -150,11 +156,13 @@ DataGrip connections:
 ```bash
 kubectl port-forward deployment/hive-server --address localhost 10000:10000 -n data
 kubectl port-forward -n data svc/trino 8089:8080
+kubectl port-forward -n spark svc/spark-history-server 18080:18080
 ```
 
 - Hive JDBC: `jdbc:hive2://localhost:10000/default;auth=noSasl`
 - Trino JDBC: `jdbc:trino://localhost:8089/hive/default`
 - MinIO console: `kubectl port-forward -n data svc/minio 9001:9001`, then open `http://localhost:9001`
+- Spark History Server: `http://localhost:18080`
 
 Hive DataGrip settings:
 
@@ -187,9 +195,7 @@ The Kubernetes path now covers Spark Operator, MinIO object storage, Hive metast
 
 - Add PVCs or backup/restore notes for Hive metastore PostgreSQL and MinIO so cluster recreation does not lose metadata or object data unexpectedly.
 - Update `jobs/log-analyzer-scala/README.md` to document the Kubernetes/S3A workflow and current defaults, because it still focuses on Docker/HDFS.
-- Add Spark history/event logging for completed SparkApplication runs if job debugging needs to survive driver pod cleanup.
 - Decide whether HiveServer2 and Trino should stay port-forward-only for local development or get NodePort/Ingress manifests for stable DataGrip endpoints.
-- Add health checks or smoke-test commands to the roadmap for MinIO, Hive metastore, HiveServer2, Trino, and the log analyzer job.
 - Pin and document the Spark Operator Helm repository/chart version used by the cluster, then keep `k8s/spark-pi.yaml` aligned with that Spark version.
 - Decide whether legacy HDFS/YARN components are intentionally retired in Kubernetes or need replacement manifests. The current Kubernetes design is MinIO-first and does not deploy HDFS, YARN, NameNode, DataNode, ResourceManager, NodeManager, or Hadoop HistoryServer.
 
