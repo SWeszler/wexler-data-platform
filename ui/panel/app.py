@@ -288,21 +288,22 @@ for item in s3_paths:
     left.write(item.name)
     right.code(item.value, language="text")
 
-jobs_title, refresh_col = st.columns([3, 1])
-jobs_title.header("Spark Jobs")
-if refresh_col.button("Refresh status", use_container_width=True):
-    st.rerun()
+st.header("Spark Jobs")
 st.write("Run SparkApplication manifests discovered from job folders.")
 st.caption(f"Jobs directory: {SPARK_JOBS_DIR}")
 
-spark_jobs, spark_job_errors = discover_jobs(SPARK_JOBS_DIR)
-if spark_job_errors:
-    for error in spark_job_errors:
-        st.warning(error)
-if not spark_jobs:
-    st.info("No runnable jobs found. Add jobs/<name>/sparkapplication.yaml.")
-for spark_job in spark_jobs:
-    render_job_card(spark_job)
+@st.fragment(run_every="5s")
+def render_spark_jobs():
+    spark_jobs, spark_job_errors = discover_jobs(SPARK_JOBS_DIR)
+    if spark_job_errors:
+        for error in spark_job_errors:
+            st.warning(error)
+    if not spark_jobs:
+        st.info("No runnable jobs found. Add jobs/<name>/sparkapplication.yaml.")
+    for spark_job in spark_jobs:
+        render_job_card(spark_job)
+
+render_spark_jobs()
 
 st.header("Ingress Setup")
 st.code("sudo minikube tunnel", language="bash")
