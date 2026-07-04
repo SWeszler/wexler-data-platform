@@ -36,7 +36,6 @@ spec:
     - default
     - --outputBase
     - s3a://warehouse/output/sessionization
-    - --overwrite
   driver:
     cores: 1
     memory: 1g

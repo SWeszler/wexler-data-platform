@@ -114,7 +114,7 @@ Open `http://minio.wexler.test`, sign in with `minioadmin` / `minioadmin`, creat
 Run the job through Spark Operator:
 
 ```bash
-kubectl apply -f ./k8s/log-analyzer-scala.yaml
+kubectl apply -f ./jobs/<job-name>/sparkapplication.yaml
 kubectl get sparkapplication -n spark --watch
 kubectl logs -n spark log-analyzer-scala-driver
 ```

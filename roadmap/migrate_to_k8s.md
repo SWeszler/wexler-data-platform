@@ -185,7 +185,7 @@ The Spark job reads it from `s3a://logs/web_server_logs.txt`.
 Run the job through Spark Operator:
 
 ```bash
-kubectl apply -f ./k8s/log-analyzer-scala.yaml
+kubectl apply -f ./jobs/<job-name>/sparkapplication.yaml
 kubectl get sparkapplication -n spark --watch
 kubectl logs -n spark log-analyzer-scala-driver
 ```
