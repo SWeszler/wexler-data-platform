@@ -1,17 +1,7 @@
-DOCKER_NETWORK = wexler-data-platform_default
-ENV_FILE = hadoop.env
-current_branch := $(shell git rev-parse --abbrev-ref HEAD)
 JOB ?= log-analyzer-scala
 DOCKER_PLATFORM ?= linux/arm64
-PANEL_IMAGE ?= wexler-ui-panel:job-runner-rbac
-build:
-	docker build -t bde2020/hadoop-base:$(current_branch) ./base
-	docker build -t bde2020/hadoop-namenode:$(current_branch) ./namenode
-	docker build -t bde2020/hadoop-datanode:$(current_branch) ./datanode
-	docker build -t bde2020/hadoop-resourcemanager:$(current_branch) ./resourcemanager
-	docker build -t bde2020/hadoop-nodemanager:$(current_branch) ./nodemanager
-	docker build -t bde2020/hadoop-historyserver:$(current_branch) ./historyserver
-	docker build -t bde2020/hive:$(current_branch) ./
+PANEL_VERSION := $(shell cat ui/panel/VERSION)
+PANEL_IMAGE ?= wexler-ui-panel:$(PANEL_VERSION)
 
 build-job:
 	docker build --platform $(DOCKER_PLATFORM) -t $(JOB) ./jobs/$(JOB)
@@ -26,3 +16,6 @@ build-panel:
 
 load-panel:
 	minikube image load $(PANEL_IMAGE)
+
+prepare-panel: build-panel load-panel
+

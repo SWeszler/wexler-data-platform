@@ -121,8 +121,6 @@ def run_action(label: str, job: SparkJob) -> None:
             k8s.create_application(job)
         elif label == "Rerun":
             k8s.rerun_application(job)
-        elif label == "Delete":
-            k8s.delete_application(job)
         st.success(f"{label} requested for {job.name}.")
         st.rerun()
     except ApiException as exc:
@@ -187,13 +185,11 @@ def render_job_card(job: SparkJob) -> None:
         if job.image:
             st.code(job.image, language="text")
 
-        run_col, rerun_col, delete_col = st.columns(3)
+        run_col, rerun_col = st.columns(2)
         if run_col.button("Run", key=f"run-{job.name}", disabled=state.exists):
             run_action("Run", job)
         if rerun_col.button("Rerun", key=f"rerun-{job.name}"):
             run_action("Rerun", job)
-        if delete_col.button("Delete", key=f"delete-{job.name}", disabled=not state.exists):
-            run_action("Delete", job)
 
         render_spark_ui(job, state)
         render_logs(job, state)

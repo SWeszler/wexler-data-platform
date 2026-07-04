@@ -132,7 +132,7 @@ spec:
       serviceAccountName: ui-panel
       containers:
         - name: ui-panel
-          image: wexler-ui-panel:job-runner-rbac
+          image: wexler-ui-panel:0.2.0
           imagePullPolicy: Never
           envFrom:
             - configMapRef:
