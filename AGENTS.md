@@ -2,27 +2,27 @@
 
 ## Project Structure & Module Organization
 
-This repository defines a Docker-based Hadoop, Spark, Hive, and Trino training environment. Core service images live in directories such as `base/`, `namenode/`, `datanode/`, `master/`, `worker/`, `historyserver/`, and `submit/`. The main orchestration file is `docker-compose.yml`, with shared Hadoop/Hive settings in `hadoop.env`, `hadoop-hive.env`, `conf/`, `spark/conf/`, and `trino/`.
+This repository defines a Kubernetes-based Spark, MinIO, Hive, and Trino data platform. The main orchestration is handled via Kubernetes manifests inside `k8s/` and spark applications in `jobs/`.
 
 Spark examples and scripts live in `scripts/spark/`. The Scala log analysis job is in `jobs/log-analyzer-scala/`, with source code under `src/main/scala/`, SBT config in `build.sbt` and `project/`, and job-specific Spark/Hive config beside its Dockerfile. Challenge data and generator code live in `challenge/`.
 
 ## Build, Test, and Development Commands
 
-- `docker-compose up -d`: start the local Hadoop/Spark/Hive stack.
-- `docker-compose down`: stop the stack.
-- `docker build --platform linux/amd64 -t log-analyzer-scala .`: build the Scala log analyzer from `jobs/log-analyzer-scala/`.
-- `docker run --rm --network wexler-data-platform_default ... log-analyzer-scala`: submit the log analyzer job.
-- `make build`: build the base Hadoop service images.
+- `make build-panel`: build the UI panel Docker image.
+- `make load-panel`: load the UI panel image into Minikube.
+- `make build-job`: build a Spark Scala job Docker image (e.g. `log-analyzer-scala`).
+- `make load-job`: load the job image into Minikube.
+- `kubectl apply -f k8s/platform/`: deploy the core platform services (MinIO, Hive, Trino, Spark History Server).
 
-Use Spark Master at `http://localhost:8080/`, Spark worker at `http://localhost:8081/`, and HDFS NameNode at `http://localhost:9870/` for local inspection.
+Use the UI Panel at `http://panel.wexler.test` (with `minikube tunnel` running) for monitoring and local inspection.
 
 ## Coding Style & Naming Conventions
 
-Keep shell scripts POSIX/Bash-friendly, explicit, and readable. Use two-space indentation in YAML and preserve existing Docker Compose style. Scala code should follow the current compact Spark style in `SessionAnalysis.scala`: clear DataFrame transformations, descriptive names, and minimal comments only where logic is non-obvious. Do not commit generated build output such as `target/`, `.bsp/`, `.scala-build/`, or IDE files.
+Keep shell scripts POSIX/Bash-friendly, explicit, and readable. Use two-space indentation in YAML. Scala code should follow the current compact Spark style in `SessionAnalysis.scala`: clear DataFrame transformations, descriptive names, and minimal comments only where logic is non-obvious. Do not commit generated build output such as `target/`, `.bsp/`, `.scala-build/`, or IDE files.
 
 ## Testing Guidelines
 
-There is no dedicated automated test suite. Validate changes by building affected images and running the smallest relevant job. For the Scala log analyzer, build the image, submit it against the Compose network, and verify Spark finishes successfully plus expected Hive/Parquet outputs are produced.
+There is no dedicated automated test suite. Validate changes by building affected images and running the smallest relevant job. For the Scala log analyzer, build the image, load it to Minikube, run the job on the cluster, and verify Spark finishes successfully plus expected Hive/Parquet outputs are produced.
 
 For UI changes, verify the rendered interface in a browser before claiming the work is done. For fast local checks, create or reuse a Python virtualenv, install the UI requirements, run the app locally, and inspect it in a browser. When Kubernetes behavior or container packaging is part of the change, rebuild and redeploy the affected image, open the panel through port-forward or Ingress, and confirm the changed behavior in the browser.
 
