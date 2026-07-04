@@ -122,12 +122,12 @@ default_datagrip_links = [
     {
         "name": "Hive",
         "value": f"jdbc:hive2://{HOST}:{HIVE_PORT}/default;auth=noSasl",
-        "command": "kubectl port-forward deployment/hive-server --address localhost 10000:10000 -n data",
+        "command": "Requires k8s/access/local-jdbc.yaml and a LoadBalancer/tunnel provider",
     },
     {
         "name": "Trino",
-        "value": f"jdbc:trino://{HOST}:{TRINO_PORT}/hive/default",
-        "command": "kubectl port-forward -n data svc/trino 8089:8080",
+        "value": f"jdbc:trino://{HOST}:18089/hive/default",
+        "command": "Requires k8s/access/local-jdbc.yaml and a LoadBalancer/tunnel provider",
     },
 ]
 
@@ -166,7 +166,7 @@ for index, link in enumerate(ingress_links):
         st.code(link.url, language="text")
 
 st.header("DataGrip")
-st.write("Use these URLs after starting the Hive and Trino JDBC port-forwards.")
+st.write("Use these URLs after applying local JDBC access services and starting a LoadBalancer/tunnel provider.")
 
 datagrip_cols = st.columns(2)
 for index, item in enumerate(datagrip_links):

@@ -32,12 +32,12 @@ data:
       {
         "name": "Hive",
         "value": "jdbc:hive2://localhost:10000/default;auth=noSasl",
-        "command": "kubectl port-forward deployment/hive-server --address localhost 10000:10000 -n data"
+        "command": "Requires k8s/access/local-jdbc.yaml and a LoadBalancer/tunnel provider"
       },
       {
         "name": "Trino",
-        "value": "jdbc:trino://localhost:8089/hive/default",
-        "command": "kubectl port-forward -n data svc/trino 8089:8080"
+        "value": "jdbc:trino://localhost:18089/hive/default",
+        "command": "Requires k8s/access/local-jdbc.yaml and a LoadBalancer/tunnel provider"
       }
     ]
   S3_PATHS_JSON: |

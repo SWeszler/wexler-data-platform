@@ -86,6 +86,12 @@ Deploy Minikube Ingress for browser UIs:
 kubectl apply -f ./k8s/ingress/minikube.yaml
 ```
 
+Deploy local JDBC access services:
+
+```bash
+kubectl apply -f ./k8s/access/local-jdbc.yaml
+```
+
 Keep a tunnel running for local Ingress access:
 
 ```bash
@@ -120,15 +126,12 @@ Minikube Ingress browser URLs:
 - Spark History Server: `http://spark-history.wexler.test`
 - UI Panel: `http://panel.wexler.test`
 
-Local JDBC connections:
-
-```bash
-kubectl port-forward deployment/hive-server --address localhost 10000:10000 -n data
-kubectl port-forward -n data svc/trino 8089:8080
-```
+Local DataGrip connections:
 
 - Hive JDBC: `jdbc:hive2://localhost:10000/default;auth=noSasl`
-- Trino JDBC: `jdbc:trino://localhost:8089/hive/default`
+- Trino JDBC: `jdbc:trino://localhost:18089/hive/default`
+
+These JDBC URLs use `LoadBalancer` services from `k8s/access/local-jdbc.yaml`. On Minikube, keep `sudo minikube tunnel` running.
 
 For VM deployment, use `k8s/ingress/vm.yaml` as the starting point and replace the `wexler.example.com` hostnames with real DNS names. Hive JDBC still needs port-forward, NodePort, LoadBalancer, or TCP ingress because standard HTTP Ingress does not expose HiveServer2's raw TCP port `10000`.
 

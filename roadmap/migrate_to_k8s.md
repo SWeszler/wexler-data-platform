@@ -155,6 +155,12 @@ Deploy Minikube Ingress for browser UIs:
 kubectl apply -f ./k8s/ingress/minikube.yaml
 ```
 
+Deploy local JDBC access services:
+
+```bash
+kubectl apply -f ./k8s/access/local-jdbc.yaml
+```
+
 Keep a tunnel running for local Ingress access:
 
 ```bash
@@ -193,13 +199,10 @@ Minikube Ingress browser URLs:
 
 DataGrip connections:
 
-```bash
-kubectl port-forward deployment/hive-server --address localhost 10000:10000 -n data
-kubectl port-forward -n data svc/trino 8089:8080
-```
-
 - Hive JDBC: `jdbc:hive2://localhost:10000/default;auth=noSasl`
-- Trino JDBC: `jdbc:trino://localhost:8089/hive/default`
+- Trino JDBC: `jdbc:trino://localhost:18089/hive/default`
+
+These JDBC URLs use `LoadBalancer` services from `k8s/access/local-jdbc.yaml`. On Minikube, keep `sudo minikube tunnel` running.
 
 VM Ingress:
 
