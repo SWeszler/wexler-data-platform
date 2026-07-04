@@ -24,6 +24,8 @@ Keep shell scripts POSIX/Bash-friendly, explicit, and readable. Use two-space in
 
 There is no dedicated automated test suite. Validate changes by building affected images and running the smallest relevant job. For the Scala log analyzer, build the image, submit it against the Compose network, and verify Spark finishes successfully plus expected Hive/Parquet outputs are produced.
 
+For UI changes, verify the rendered interface in a browser before claiming the work is done. For fast local checks, create or reuse a Python virtualenv, install the UI requirements, run the app locally, and inspect it in a browser. When Kubernetes behavior or container packaging is part of the change, rebuild and redeploy the affected image, open the panel through port-forward or Ingress, and confirm the changed behavior in the browser.
+
 ## Commit & Pull Request Guidelines
 
 Use short, imperative commit messages matching project history, for example `add log analysis script` or `update README with access instructions`. Pull requests should describe the service or job changed, include commands run for verification, and call out any Docker ports, HDFS paths, or Hive table changes.
@@ -31,5 +33,6 @@ Use short, imperative commit messages matching project history, for example `add
 ## Agent-Specific Instructions
 
 Prefer scoped edits. Do not revert unrelated user changes. Check live Docker state before making claims about running containers, ports, or Spark deployment behavior.
+Do not claim a change is complete until the relevant test or browser verification has actually been run. If verification is blocked, say exactly what was not tested and why.
 When adding a workaround, include a short explaining comment with the reason and the condition for removing it.
 Do not elaborate in your replies; provide concise, actionable instructions. Avoid speculative or unverified statements about the environment.
