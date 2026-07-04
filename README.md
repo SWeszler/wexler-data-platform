@@ -46,6 +46,7 @@ Install Spark Operator:
 
 ```bash
 helm repo add spark-operator https://kubeflow.github.io/spark-operator
+helm repo add strimzi https://strimzi.io/charts/
 helm repo update
 
 helm upgrade --install spark-operator spark-operator/spark-operator \
@@ -55,6 +56,14 @@ helm upgrade --install spark-operator spark-operator/spark-operator \
   --set webhook.enable=true
 ```
 
+Install Strimzi for Kafka:
+
+```bash
+helm upgrade --install strimzi-cluster-operator strimzi/strimzi-kafka-operator \
+  --namespace data \
+  --set watchNamespaces="{data}"
+```
+
 Deploy the data and query services:
 
 ```bash
@@ -62,6 +71,10 @@ kubectl apply -f ./k8s/platform/minio.yaml
 kubectl apply -f ./k8s/platform/hive.yaml
 kubectl apply -f ./k8s/platform/trino.yaml
 kubectl apply -f ./k8s/platform/spark-history.yaml
+kubectl apply -f ./k8s/platform/kafka.yaml
+kubectl wait kafka/wexler-kafka -n data --for=condition=Ready --timeout=10m
+kubectl apply -f ./k8s/platform/kafka-topics.yaml
+kubectl apply -f ./k8s/platform/kafbat-ui.yaml
 
 kubectl get pods -n data --watch
 ```
@@ -111,6 +124,7 @@ Point the local hostnames at `127.0.0.1` in `/etc/hosts`:
 127.0.0.1 trino.wexler.test
 127.0.0.1 spark-history.wexler.test
 127.0.0.1 panel.wexler.test
+127.0.0.1 kafka-ui.wexler.test
 ```
 
 Upload input data through the MinIO Console:
@@ -125,12 +139,25 @@ kubectl get sparkapplication -n spark --watch
 kubectl logs -n spark log-analyzer-scala-driver
 ```
 
+Run the Kafka publisher job:
+
+```bash
+make prepare-job JOB=kafka-publisher-scala
+kubectl apply -f ./jobs/kafka-publisher-scala/sparkapplication.yaml
+kubectl get sparkapplication -n spark --watch
+kubectl logs -n spark kafka-publisher-scala-driver
+```
+
+The Kafka publisher writes synthetic JSON events to topic `spark-smoke-events`.
+Open Kafbat UI and inspect that topic to confirm the messages arrived.
+
 Minikube Ingress browser URLs:
 
 - MinIO Console: `http://minio.wexler.test`
 - Trino UI: `http://trino.wexler.test/ui/`
 - Spark History Server: `http://spark-history.wexler.test`
 - UI Panel: `http://panel.wexler.test`
+- Kafbat UI: `http://kafka-ui.wexler.test`
 
 Local DataGrip connections:
 

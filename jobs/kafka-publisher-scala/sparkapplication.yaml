@@ -1,0 +1,58 @@
+apiVersion: sparkoperator.k8s.io/v1beta2
+kind: SparkApplication
+metadata:
+  name: kafka-publisher-scala
+  namespace: spark
+spec:
+  type: Scala
+  mode: cluster
+  image: kafka-publisher-scala
+  imagePullPolicy: Never
+  mainClass: com.example.KafkaPublisher
+  mainApplicationFile: local:///app/target/kafka-publisher-scala-assembly-0.1.0-SNAPSHOT.jar
+  sparkVersion: "3.5.6"
+  restartPolicy:
+    type: Never
+  deps:
+    packages:
+      - org.apache.hadoop:hadoop-aws:3.3.4
+      - com.amazonaws:aws-java-sdk-bundle:1.12.262
+      - org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.6
+  sparkConf:
+    spark.jars.ivy: /tmp/.ivy2
+    spark.eventLog.enabled: "true"
+    spark.eventLog.dir: s3a://warehouse/spark-events
+    spark.hadoop.fs.s3a.endpoint: http://minio.data.svc.cluster.local:9000
+    spark.hadoop.fs.s3a.path.style.access: "true"
+    spark.hadoop.fs.s3a.connection.ssl.enabled: "false"
+    spark.hadoop.fs.s3a.impl: org.apache.hadoop.fs.s3a.S3AFileSystem
+    spark.hadoop.fs.s3a.aws.credentials.provider: com.amazonaws.auth.EnvironmentVariableCredentialsProvider
+  arguments:
+    - --bootstrapServers
+    - wexler-kafka-kafka-bootstrap.data.svc.cluster.local:9092
+    - --topic
+    - spark-smoke-events
+    - --eventCount
+    - "25"
+  driver:
+    cores: 1
+    memory: 1g
+    serviceAccount: spark
+    envSecretKeyRefs:
+      AWS_ACCESS_KEY_ID:
+        name: minio-root
+        key: MINIO_ROOT_USER
+      AWS_SECRET_ACCESS_KEY:
+        name: minio-root
+        key: MINIO_ROOT_PASSWORD
+  executor:
+    cores: 1
+    instances: 1
+    memory: 1g
+    envSecretKeyRefs:
+      AWS_ACCESS_KEY_ID:
+        name: minio-root
+        key: MINIO_ROOT_USER
+      AWS_SECRET_ACCESS_KEY:
+        name: minio-root
+        key: MINIO_ROOT_PASSWORD

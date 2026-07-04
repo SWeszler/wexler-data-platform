@@ -81,6 +81,11 @@ data:
         "description": "View completed Spark applications from MinIO event logs."
       },
       {
+        "name": "Kafbat UI",
+        "url": "http://kafka-ui.wexler.test",
+        "description": "Inspect Kafka brokers, topics, consumers, and messages."
+      },
+      {
         "name": "UI Panel",
         "url": "http://panel.wexler.test",
         "description": "Open this launcher through Ingress."
@@ -141,7 +146,7 @@ spec:
       serviceAccountName: ui-panel
       containers:
         - name: ui-panel
-          image: wexler-ui-panel:0.3.4
+          image: wexler-ui-panel:0.3.5
           imagePullPolicy: Never
           envFrom:
             - configMapRef:
@@ -167,6 +172,8 @@ spec:
               value: http://trino.wexler.test/ui/
             - name: SPARK_HISTORY_INGRESS_URL
               value: http://spark-history.wexler.test
+            - name: KAFBAT_UI_INGRESS_URL
+              value: http://kafka-ui.wexler.test
             - name: PANEL_INGRESS_URL
               value: http://panel.wexler.test
             - name: SPARK_JOBS_DIR
