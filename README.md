@@ -62,6 +62,7 @@ Install Strimzi for Kafka:
 helm upgrade --install strimzi-cluster-operator strimzi/strimzi-kafka-operator \
   --namespace data \
   --set watchNamespaces="{data}"
+kubectl rollout status deployment/strimzi-cluster-operator -n data --timeout=180s
 ```
 
 Deploy the data and query services:

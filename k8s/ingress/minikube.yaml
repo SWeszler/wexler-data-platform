@@ -61,6 +61,8 @@ metadata:
   name: ui-panel
   namespace: platform
 spec:
+  # Local Minikube only. Docker-driver ingress can present browser traffic as a
+  # cluster bridge IP instead of 127.0.0.1, so a loopback whitelist causes 403s.
   ingressClassName: nginx
   rules:
     - host: panel.wexler.test
