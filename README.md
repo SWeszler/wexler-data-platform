@@ -139,6 +139,42 @@ Local DataGrip connections:
 
 These JDBC URLs use `LoadBalancer` services from `k8s/access/local-jdbc.yaml`. On Minikube, keep `sudo minikube tunnel` running.
 
+## Remote Debugging Spark Jobs with IntelliJ
+
+The UI panel includes a **🐛 Debug Run** button on each Spark job card. It submits the job with JDWP remote-debug agents enabled and `suspend=y`, so the driver and executor JVMs wait for a debugger before executing any application code.
+
+### What Debug Run does
+
+1. Deletes any existing SparkApplication and stale debug Services for the job.
+2. Deep-copies the job manifest and injects:
+   - Driver JDWP on port `5005` (`suspend=y`)
+   - Executor JDWP on port `5006` (`suspend=y`)
+   - `executor.instances: 1` (so the debug Service selector is deterministic)
+   - Label/annotation `wexler.dev/debug-mode: "true"`
+3. Creates two `LoadBalancer` Services in the `spark` namespace:
+   - `<job-name>-driver-debug` → port `5005`
+   - `<job-name>-executor-debug` → port `5006`
+4. Submits the mutated SparkApplication.
+
+The panel then displays the fixed debugger targets so you can attach IntelliJ.
+
+### Attaching IntelliJ
+
+1. Click **🐛 Debug Run** in the panel.
+2. Keep `sudo minikube tunnel` running, then wait for the panel to show the **IntelliJ Remote Debug Targets** section.
+3. In IntelliJ, create a **Remote JVM Debug** run configuration:
+   - **Host**: the value shown in the panel (default `127.0.0.1`)
+   - **Port**: `5005` for the driver or `5006` for the executor
+   - **Use module classpath**: your Spark job module
+4. Click **Debug** in IntelliJ. The suspended JVM will resume and hit your breakpoints.
+5. Repeat for the executor port if you need to debug executor-side code.
+
+### `DEBUG_NODE_HOST`
+
+The panel reads the `DEBUG_NODE_HOST` environment variable (default `127.0.0.1`) and displays it as the IntelliJ host. For the local Minikube setup, keep this as `127.0.0.1` and run `sudo minikube tunnel`.
+
+Update the value in `k8s/platform/ui-panel.yaml` under the `ui-panel` Deployment env, or set it as an environment variable when running the panel locally.
+
 For VM deployment, use `k8s/ingress/vm.yaml` as the starting point and replace the `wexler.example.com` hostnames with real DNS names. Hive JDBC still needs port-forward, NodePort, LoadBalancer, or TCP ingress because standard HTTP Ingress does not expose HiveServer2's raw TCP port `10000`.
 
 For the detailed migration notes and remaining work, see `roadmap/migrate_to_k8s.md`.

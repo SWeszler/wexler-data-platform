@@ -29,6 +29,7 @@ SPARK_HISTORY_INGRESS_URL = env(
 )
 PANEL_INGRESS_URL = env("PANEL_INGRESS_URL", "http://panel.wexler.test")
 SPARK_JOBS_DIR = default_jobs_dir()
+DEBUG_NODE_HOST = env("DEBUG_NODE_HOST", "127.0.0.1")
 
 
 @dataclass(frozen=True)
@@ -121,6 +122,8 @@ def run_action(label: str, job: SparkJob) -> None:
             k8s.create_application(job)
         elif label == "Rerun":
             k8s.rerun_application(job)
+        elif label == "Debug Run":
+            k8s.debug_run_application(job)
         st.success(f"{label} requested for {job.name}.")
         st.rerun()
     except ApiException as exc:
@@ -165,6 +168,24 @@ def render_logs(job: SparkJob, state: SparkApplicationState) -> None:
             st.error(f"Unable to read logs: {exc}")
 
 
+def render_debug_info(job: SparkJob, state: SparkApplicationState) -> None:
+    if not state.debug_mode or not state.exists:
+        return
+
+    st.markdown("---")
+    st.markdown("🐛 **Debug Mode Active** — JVMs started with `suspend=y`")
+    st.caption("Debug Services are exposed with LoadBalancer services. Keep minikube tunnel running.")
+
+    st.markdown("**IntelliJ → Remote JVM Debug**")
+    driver_col, executor_col = st.columns(2)
+    with driver_col:
+        st.caption("Driver target")
+        st.code(f"{DEBUG_NODE_HOST}:5005", language=None)
+    with executor_col:
+        st.caption("Executor target")
+        st.code(f"{DEBUG_NODE_HOST}:5006", language=None)
+
+
 def render_job_card(job: SparkJob) -> None:
     with st.container(border=True):
         title, status_col = st.columns([2, 1])
@@ -185,12 +206,15 @@ def render_job_card(job: SparkJob) -> None:
         if job.image:
             st.code(job.image, language="text")
 
-        run_col, rerun_col = st.columns(2)
+        run_col, rerun_col, debug_col = st.columns(3)
         if run_col.button("Run", key=f"run-{job.name}", disabled=state.exists):
             run_action("Run", job)
         if rerun_col.button("Rerun", key=f"rerun-{job.name}"):
             run_action("Rerun", job)
+        if debug_col.button("\U0001f41b Debug Run", key=f"debug-run-{job.name}"):
+            run_action("Debug Run", job)
 
+        render_debug_info(job, state)
         render_spark_ui(job, state)
         render_logs(job, state)
 

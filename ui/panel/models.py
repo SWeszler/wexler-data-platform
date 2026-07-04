@@ -19,4 +19,5 @@ class SparkApplicationState:
     phase: str
     driver_pod: str | None
     ui_service: str | None
+    debug_mode: bool = False
 
