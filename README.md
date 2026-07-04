@@ -24,6 +24,12 @@ minikube start \
   --driver=docker
 ```
 
+> [!TIP]
+> If you restart Minikube or encounter TLS/certificate/connection errors (e.g., `tls: failed to verify certificate`), run the following command to update your local `kubectl` context:
+> ```bash
+> minikube update-context
+> ```
+
 Enable the local ingress controller:
 
 ```bash
