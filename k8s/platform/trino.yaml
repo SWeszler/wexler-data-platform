@@ -1,6 +1,20 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
+  name: trino-config
+  namespace: data
+data:
+  config.properties: |
+    coordinator=true
+    node-scheduler.include-coordinator=true
+    http-server.http.port=8080
+    http-server.process-forwarded=true
+    discovery.uri=http://localhost:8080
+    catalog.management=${ENV:CATALOG_MANAGEMENT}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
   name: trino-catalog
   namespace: data
 data:
@@ -47,9 +61,15 @@ spec:
             - name: http
               containerPort: 8080
           volumeMounts:
+            - name: config
+              mountPath: /etc/trino/config.properties
+              subPath: config.properties
             - name: catalog
               mountPath: /etc/trino/catalog
       volumes:
+        - name: config
+          configMap:
+            name: trino-config
         - name: catalog
           configMap:
             name: trino-catalog

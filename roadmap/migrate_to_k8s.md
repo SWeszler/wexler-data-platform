@@ -123,16 +123,6 @@ kubectl get pods -n data --watch
 # Ctrl+C once minio, hive-metastore, hive-server, and trino are Running
 ```
 
-Upload the log file through the MinIO Console:
-
-```bash
-kubectl port-forward -n data svc/minio 9001:9001
-```
-
-Open `http://localhost:9001`, sign in with `minioadmin` / `minioadmin`, create the `logs` bucket if needed, and upload `jobs/log-analyzer-scala/log-generator/web_server_logs.txt` as `web_server_logs.txt`.
-
-The Spark job reads it from `s3a://logs/web_server_logs.txt`.
-
 Build and load the Scala job image into minikube:
 
 ```bash
@@ -143,6 +133,49 @@ docker build --platform linux/arm64 -t log-analyzer-scala ./jobs/log-analyzer-sc
 minikube image load log-analyzer-scala
 ```
 
+Build and load the UI panel image:
+
+```bash
+docker build --platform linux/arm64 -t wexler-ui-panel:ingress-first ./ui/panel
+```
+
+```bash
+minikube image load wexler-ui-panel:ingress-first
+```
+
+Deploy the UI panel:
+
+```bash
+kubectl apply -f ./k8s/platform/ui-panel.yaml
+```
+
+Deploy Minikube Ingress for browser UIs:
+
+```bash
+kubectl apply -f ./k8s/ingress/minikube.yaml
+```
+
+Keep a tunnel running for local Ingress access:
+
+```bash
+sudo minikube tunnel
+```
+
+Add local host entries pointing at `127.0.0.1`:
+
+```text
+127.0.0.1 minio.wexler.test
+127.0.0.1 trino.wexler.test
+127.0.0.1 spark-history.wexler.test
+127.0.0.1 panel.wexler.test
+```
+
+Upload the log file through the MinIO Console:
+
+Open `http://minio.wexler.test`, sign in with `minioadmin` / `minioadmin`, create the `logs` bucket if needed, and upload `jobs/log-analyzer-scala/log-generator/web_server_logs.txt` as `web_server_logs.txt`.
+
+The Spark job reads it from `s3a://logs/web_server_logs.txt`.
+
 Run the job through Spark Operator:
 
 ```bash
@@ -151,18 +184,29 @@ kubectl get sparkapplication -n spark --watch
 kubectl logs -n spark log-analyzer-scala-driver
 ```
 
+Minikube Ingress browser URLs:
+
+- MinIO console: `http://minio.wexler.test`
+- Trino UI: `http://trino.wexler.test/ui/`
+- Spark History Server: `http://spark-history.wexler.test`
+- UI Panel: `http://panel.wexler.test`
+
 DataGrip connections:
 
 ```bash
 kubectl port-forward deployment/hive-server --address localhost 10000:10000 -n data
 kubectl port-forward -n data svc/trino 8089:8080
-kubectl port-forward -n spark svc/spark-history-server 18080:18080
 ```
 
 - Hive JDBC: `jdbc:hive2://localhost:10000/default;auth=noSasl`
 - Trino JDBC: `jdbc:trino://localhost:8089/hive/default`
-- MinIO console: `kubectl port-forward -n data svc/minio 9001:9001`, then open `http://localhost:9001`
-- Spark History Server: `http://localhost:18080`
+
+VM Ingress:
+
+- Use `k8s/ingress/vm.yaml` as the starting point.
+- Replace `wexler.example.com` hostnames with real DNS names.
+- Add TLS, auth, and firewall/VPN restrictions before exposing the VM outside a trusted network.
+- Keep HiveServer2 JDBC separate from HTTP Ingress. Use port-forward, NodePort, LoadBalancer, or TCP ingress for port `10000`.
 
 Hive DataGrip settings:
 
@@ -195,7 +239,8 @@ The Kubernetes path now covers Spark Operator, MinIO object storage, Hive metast
 
 - Add PVCs or backup/restore notes for Hive metastore PostgreSQL and MinIO so cluster recreation does not lose metadata or object data unexpectedly.
 - Update `jobs/log-analyzer-scala/README.md` to document the Kubernetes/S3A workflow and current defaults, because it still focuses on Docker/HDFS.
-- Decide whether HiveServer2 and Trino should stay port-forward-only for local development or get NodePort/Ingress manifests for stable DataGrip endpoints.
+- Decide the VM access method for HiveServer2 JDBC: port-forward over SSH/VPN, NodePort, LoadBalancer, or TCP ingress.
+- Add production VM hardening for Ingress: real DNS, TLS, authentication, and firewall/VPN restrictions.
 - Pin and document the Spark Operator Helm repository/chart version used by the cluster, then keep `k8s/spark-pi.yaml` aligned with that Spark version.
 - Decide whether legacy HDFS/YARN components are intentionally retired in Kubernetes or need replacement manifests. The current Kubernetes design is MinIO-first and does not deploy HDFS, YARN, NameNode, DataNode, ResourceManager, NodeManager, or Hadoop HistoryServer.
 

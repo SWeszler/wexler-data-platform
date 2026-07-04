@@ -24,6 +24,12 @@ minikube start \
   --driver=docker
 ```
 
+Enable the local ingress controller:
+
+```bash
+minikube addons enable ingress
+```
+
 Create namespaces and the Spark service account:
 
 ```bash
@@ -54,20 +60,50 @@ kubectl apply -f ./k8s/platform/spark-history.yaml
 kubectl get pods -n data --watch
 ```
 
-Upload input data through the MinIO Console:
-
-```bash
-kubectl port-forward -n data svc/minio 9001:9001
-```
-
-Open `http://localhost:9001`, sign in with `minioadmin` / `minioadmin`, create the `logs` bucket if needed, and upload `jobs/log-analyzer-scala/log-generator/web_server_logs.txt` as `web_server_logs.txt`. The Spark job reads it from `s3a://logs/web_server_logs.txt`.
-
 Build and load the Scala job image into Minikube:
 
 ```bash
 docker build --platform linux/arm64 -t log-analyzer-scala ./jobs/log-analyzer-scala
 minikube image load log-analyzer-scala
 ```
+
+Build and load the UI panel image:
+
+```bash
+docker build --platform linux/arm64 -t wexler-ui-panel:ingress-first ./ui/panel
+minikube image load wexler-ui-panel:ingress-first
+```
+
+Deploy the UI panel:
+
+```bash
+kubectl apply -f ./k8s/platform/ui-panel.yaml
+```
+
+Deploy Minikube Ingress for browser UIs:
+
+```bash
+kubectl apply -f ./k8s/ingress/minikube.yaml
+```
+
+Keep a tunnel running for local Ingress access:
+
+```bash
+sudo minikube tunnel
+```
+
+Point the local hostnames at `127.0.0.1` in `/etc/hosts`:
+
+```text
+127.0.0.1 minio.wexler.test
+127.0.0.1 trino.wexler.test
+127.0.0.1 spark-history.wexler.test
+127.0.0.1 panel.wexler.test
+```
+
+Upload input data through the MinIO Console:
+
+Open `http://minio.wexler.test`, sign in with `minioadmin` / `minioadmin`, create the `logs` bucket if needed, and upload `jobs/log-analyzer-scala/log-generator/web_server_logs.txt` as `web_server_logs.txt`. The Spark job reads it from `s3a://logs/web_server_logs.txt`.
 
 Run the job through Spark Operator:
 
@@ -77,18 +113,24 @@ kubectl get sparkapplication -n spark --watch
 kubectl logs -n spark log-analyzer-scala-driver
 ```
 
-Local connections:
+Minikube Ingress browser URLs:
+
+- MinIO Console: `http://minio.wexler.test`
+- Trino UI: `http://trino.wexler.test/ui/`
+- Spark History Server: `http://spark-history.wexler.test`
+- UI Panel: `http://panel.wexler.test`
+
+Local JDBC connections:
 
 ```bash
 kubectl port-forward deployment/hive-server --address localhost 10000:10000 -n data
 kubectl port-forward -n data svc/trino 8089:8080
-kubectl port-forward -n spark svc/spark-history-server 18080:18080
 ```
 
 - Hive JDBC: `jdbc:hive2://localhost:10000/default;auth=noSasl`
 - Trino JDBC: `jdbc:trino://localhost:8089/hive/default`
-- MinIO Console: `http://localhost:9001`
-- Spark History Server: `http://localhost:18080`
+
+For VM deployment, use `k8s/ingress/vm.yaml` as the starting point and replace the `wexler.example.com` hostnames with real DNS names. Hive JDBC still needs port-forward, NodePort, LoadBalancer, or TCP ingress because standard HTTP Ingress does not expose HiveServer2's raw TCP port `10000`.
 
 For the detailed migration notes and remaining work, see `roadmap/migrate_to_k8s.md`.
 
@@ -113,6 +155,7 @@ graph TD
         end
 
         SHS[Spark History Server<br/>UI 18080]
+        PANEL[Streamlit UI Panel<br/>UI 8501]
     end
 
     USER[DataGrip / Browser]
@@ -130,10 +173,11 @@ graph TD
     HS2 -. "table data on s3a://" .-> MINIO
     TRINO --> HMS
     TRINO -. "table data on s3://" .-> MINIO
-    USER -. "port-forward 10000" .-> HS2
-    USER -. "port-forward 8089" .-> TRINO
-    USER -. "port-forward 9001" .-> MINIO
-    USER -. "port-forward 18080" .-> SHS
+    USER -. "JDBC port-forward 10000" .-> HS2
+    USER -. "HTTP ingress" .-> MINIO
+    USER -. "HTTP ingress" .-> TRINO
+    USER -. "HTTP ingress" .-> SHS
+    USER -. "HTTP ingress" .-> PANEL
 ```
 
 
