@@ -136,11 +136,11 @@ minikube image load log-analyzer-scala
 Build and load the UI panel image:
 
 ```bash
-docker build --platform linux/arm64 -t wexler-ui-panel:ingress-first ./ui/panel
+make build-panel
 ```
 
 ```bash
-minikube image load wexler-ui-panel:ingress-first
+make load-panel
 ```
 
 Deploy the UI panel:

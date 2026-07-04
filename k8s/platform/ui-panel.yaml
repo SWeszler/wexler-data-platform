@@ -1,4 +1,54 @@
 apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: ui-panel
+  namespace: platform
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: ui-panel-spark-runner
+  namespace: spark
+rules:
+  - apiGroups:
+      - sparkoperator.k8s.io
+    resources:
+      - sparkapplications
+    verbs:
+      - get
+      - list
+      - create
+      - delete
+  - apiGroups:
+      - ""
+    resources:
+      - pods
+      - services
+    verbs:
+      - get
+      - list
+  - apiGroups:
+      - ""
+    resources:
+      - pods/log
+    verbs:
+      - get
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: ui-panel-spark-runner
+  namespace: spark
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: ui-panel-spark-runner
+subjects:
+  - kind: ServiceAccount
+    name: ui-panel
+    namespace: platform
+---
+apiVersion: v1
 kind: ConfigMap
 metadata:
   name: ui-panel-links
@@ -79,9 +129,10 @@ spec:
       labels:
         app: ui-panel
     spec:
+      serviceAccountName: ui-panel
       containers:
         - name: ui-panel
-          image: wexler-ui-panel:ingress-first
+          image: wexler-ui-panel:job-runner-rbac
           imagePullPolicy: Never
           envFrom:
             - configMapRef:
@@ -109,6 +160,8 @@ spec:
               value: http://spark-history.wexler.test
             - name: PANEL_INGRESS_URL
               value: http://panel.wexler.test
+            - name: SPARK_JOBS_DIR
+              value: /app/jobs
           ports:
             - name: http
               containerPort: 8501
