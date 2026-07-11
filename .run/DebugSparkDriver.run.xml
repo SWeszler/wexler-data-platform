@@ -1,5 +1,5 @@
 <component name="ProjectRunConfigurationManager">
-  <configuration default="false" name="DebugDriver" type="Remote">
+  <configuration default="false" name="DebugSparkDriver" type="Remote">
     <module name="log-analyzer-scala" />
     <option name="USE_SOCKET_TRANSPORT" value="true" />
     <option name="SERVER_MODE" value="false" />
