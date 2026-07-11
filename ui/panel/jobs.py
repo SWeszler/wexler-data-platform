@@ -32,16 +32,11 @@ def discover_jobs(jobs_dir: Path | None = None) -> tuple[list[SparkJob], list[st
     manifests = sorted(
         set(root.glob("*.yaml")) | set(root.glob("*/sparkapplication.yaml"))
     )
-    print(f"DEBUG: Scanning directory: {root}")
-    print(f"DEBUG: Found manifests: {[str(m) for m in manifests]}")
     for manifest_path in manifests:
         try:
-            job = load_job(manifest_path)
-            jobs.append(job)
-            print(f"DEBUG: Successfully loaded job: {job.name} (image: {job.image})")
+            jobs.append(load_job(manifest_path))
         except ValueError as exc:
             errors.append(str(exc))
-            print(f"DEBUG: Error loading job from {manifest_path}: {exc}")
 
     return jobs, errors
 
