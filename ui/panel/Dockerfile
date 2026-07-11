@@ -10,14 +10,6 @@ COPY ui/panel/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY ui/panel/*.py .
-COPY jobs ./source-jobs
-RUN set -eu; \
-	for manifest in ./source-jobs/*/sparkapplication.yaml; do \
-		job_dir="$(basename "$(dirname "$manifest")")"; \
-		mkdir -p "./jobs/${job_dir}"; \
-		cp "$manifest" "./jobs/${job_dir}/sparkapplication.yaml"; \
-	done; \
-	rm -rf ./source-jobs
 
 EXPOSE 8501
 

@@ -28,7 +28,11 @@ def discover_jobs(jobs_dir: Path | None = None) -> tuple[list[SparkJob], list[st
 
     jobs: list[SparkJob] = []
     errors: list[str] = []
-    for manifest_path in sorted(root.glob("*/sparkapplication.yaml")):
+    # Find flat YAML files (ConfigMap mount) and nested ones (local workspace)
+    manifests = sorted(
+        set(root.glob("*.yaml")) | set(root.glob("*/sparkapplication.yaml"))
+    )
+    for manifest_path in manifests:
         try:
             jobs.append(load_job(manifest_path))
         except ValueError as exc:
@@ -65,8 +69,14 @@ def load_job(manifest_path: Path) -> SparkJob:
         )
 
     image = spec.get("image")
+    # Flat file (e.g. adam.yaml) → stem; nested dir (e.g. adam/sparkapplication.yaml) → parent name
+    folder_name = (
+        manifest_path.stem
+        if manifest_path.name != "sparkapplication.yaml"
+        else manifest_path.parent.name
+    )
     return SparkJob(
-        folder_name=manifest_path.parent.name,
+        folder_name=folder_name,
         manifest_path=manifest_path,
         manifest=manifest,
         name=name,
