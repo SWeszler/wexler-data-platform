@@ -1,0 +1,60 @@
+apiVersion: sparkoperator.k8s.io/v1beta2
+kind: SparkApplication
+metadata:
+  name: adam-pipeline
+  namespace: spark
+spec:
+  type: Scala
+  mode: cluster
+  image: adam:1.0.1-idempotent
+  imagePullPolicy: Never
+  mainClass: com.wexler.adam.AdamPipeline
+  mainApplicationFile: local:///opt/adam/adam-pipeline.jar
+  sparkVersion: "3.5.6"
+  timeToLiveSeconds: 3600
+  restartPolicy:
+    type: Never
+  sparkConf:
+    spark.eventLog.enabled: "true"
+    spark.eventLog.dir: s3a://warehouse/spark-events
+    spark.sql.catalogImplementation: hive
+    spark.sql.warehouse.dir: s3a://warehouse/spark-warehouse
+    spark.hadoop.hive.metastore.uris: thrift://hive-metastore.data.svc.cluster.local:9083
+    spark.hadoop.fs.s3a.endpoint: http://minio.data.svc.cluster.local:9000
+    spark.hadoop.fs.s3a.path.style.access: "true"
+    spark.hadoop.fs.s3a.connection.ssl.enabled: "false"
+    spark.hadoop.fs.s3a.impl: org.apache.hadoop.fs.s3a.S3AFileSystem
+    spark.hadoop.fs.s3a.aws.credentials.provider: com.amazonaws.auth.EnvironmentVariableCredentialsProvider
+  arguments:
+    - --input
+    - s3a://genomics/input/hg002.chr20.10m-10.1m.sam
+    - --output
+    - s3a://genomics/output/hg002-alignments
+    - --database
+    - genomics
+    - --table
+    - hg002_alignments
+    - --batch-id
+    - hg002-grch38-chr20-10m-10.1m
+  driver:
+    cores: 1
+    memory: 1g
+    serviceAccount: spark
+    envSecretKeyRefs:
+      AWS_ACCESS_KEY_ID:
+        name: minio-root
+        key: MINIO_ROOT_USER
+      AWS_SECRET_ACCESS_KEY:
+        name: minio-root
+        key: MINIO_ROOT_PASSWORD
+  executor:
+    cores: 1
+    instances: 1
+    memory: 1g
+    envSecretKeyRefs:
+      AWS_ACCESS_KEY_ID:
+        name: minio-root
+        key: MINIO_ROOT_USER
+      AWS_SECRET_ACCESS_KEY:
+        name: minio-root
+        key: MINIO_ROOT_PASSWORD

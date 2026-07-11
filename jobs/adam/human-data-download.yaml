@@ -1,0 +1,70 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: hg002-region-download
+  namespace: spark
+spec:
+  backoffLimit: 2
+  ttlSecondsAfterFinished: 3600
+  template:
+    spec:
+      restartPolicy: Never
+      initContainers:
+        - name: download-region
+          image: adam-ingest:1.0
+          imagePullPolicy: Never
+          command: ["/bin/sh", "-eu", "-c"]
+          args:
+            - |
+              cd /work
+              samtools view -b -o /work/hg002.chr20.10m-10.1m.bam "$SOURCE_URL" "$REGION"
+              samtools quickcheck -v /work/hg002.chr20.10m-10.1m.bam
+              samtools view -h -o /work/hg002.chr20.10m-10.1m.sam /work/hg002.chr20.10m-10.1m.bam
+              sha256sum /work/hg002.chr20.10m-10.1m.bam > /work/hg002.chr20.10m-10.1m.bam.sha256
+              sha256sum /work/hg002.chr20.10m-10.1m.sam > /work/hg002.chr20.10m-10.1m.sam.sha256
+              {
+                echo "sample=HG002"
+                echo "genome_build=GRCh38_no_alt"
+                echo "region=$REGION"
+                echo "source=$SOURCE_URL"
+                echo "source_project=Genome in a Bottle / DeepVariant case-study data"
+              } > /work/source.properties
+          env:
+            - name: SOURCE_URL
+              value: https://storage.googleapis.com/deepvariant/case-study-testdata/HG002.novaseq.pcr-free.35x.dedup.grch38_no_alt.chr20.bam
+            - name: REGION
+              value: chr20:10100000-10200000
+          volumeMounts:
+            - name: work
+              mountPath: /work
+      containers:
+        - name: upload
+          image: minio/mc:RELEASE.2025-08-13T08-35-41Z
+          command: ["/bin/sh", "-eu", "-c"]
+          args:
+            - |
+              mc alias set minio http://minio.data.svc.cluster.local:9000 "$MINIO_USER" "$MINIO_PASSWORD" --api S3v4
+              mc mb minio/genomics --ignore-existing
+              mc cp /work/hg002.chr20.10m-10.1m.bam minio/genomics/input/hg002.chr20.10m-10.1m.bam
+              mc cp /work/hg002.chr20.10m-10.1m.bam.sha256 minio/genomics/input/hg002.chr20.10m-10.1m.bam.sha256
+              mc cp /work/hg002.chr20.10m-10.1m.sam minio/genomics/input/hg002.chr20.10m-10.1m.sam
+              mc cp /work/hg002.chr20.10m-10.1m.sam.sha256 minio/genomics/input/hg002.chr20.10m-10.1m.sam.sha256
+              mc cp /work/source.properties minio/genomics/input/hg002.chr20.10m-10.1m.source.properties
+          env:
+            - name: MINIO_USER
+              valueFrom:
+                secretKeyRef:
+                  name: minio-root
+                  key: MINIO_ROOT_USER
+            - name: MINIO_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: minio-root
+                  key: MINIO_ROOT_PASSWORD
+          volumeMounts:
+            - name: work
+              mountPath: /work
+      volumes:
+        - name: work
+          emptyDir:
+            sizeLimit: 1Gi
