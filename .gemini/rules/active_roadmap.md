@@ -9,6 +9,13 @@
 ---
 
 ## Immediate Tasks
+### ⏳ Migrate to Gradle
+Migrate the `log-analyzer-scala` project from SBT to Gradle to improve build times and simplify the configuration.
+- **Convert Build Script**: Create a `build.gradle` file equivalent to the current `build.sbt`.
+- **Apply Plugins**: Apply the Scala plugin and the Shadow plugin for creating fat jars (replacing `sbt-assembly`).
+- **Dependencies**: Translate library dependencies to Gradle syntax.
+- **Verification**: Ensure the project compiles and the fat jar can be built and submitted to Spark successfully.
+
 ### ⏳ Minikube Image Cleanup
 Automate the cleanup of unused and dangling Docker images within the Minikube environment to reclaim disk space and optimize the local development cluster.
 - **Identify Unused Images**: Determine which images inside Minikube are untagged (`<none>`) or not currently used by any running pods.
