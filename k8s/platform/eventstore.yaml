@@ -1,0 +1,69 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: eventstore
+  namespace: data
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: eventstore
+  template:
+    metadata:
+      labels:
+        app: eventstore
+    spec:
+      terminationGracePeriodSeconds: 90
+      containers:
+        - name: eventstore
+          image: eventstore:local
+          imagePullPolicy: Never
+          env:
+            - name: KAFKA_BOOTSTRAP_SERVERS
+              value: wexler-kafka-kafka-bootstrap.data.svc.cluster.local:9092
+            - name: KAFKA_TOPIC
+              value: spark-smoke-events
+            - name: TABLE_NAME
+              value: spark_smoke_events
+            - name: CONSUMER_GROUP
+              value: eventstore.spark_smoke_events
+            - name: S3_ENDPOINT
+              value: http://minio.data.svc.cluster.local:9000
+            - name: S3_BASE_PATH
+              value: s3a://warehouse/eventstore
+            - name: TRINO_JDBC_URL
+              value: jdbc:trino://trino.data.svc.cluster.local:8080/hive/default
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: minio-root
+                  key: MINIO_ROOT_USER
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: minio-root
+                  key: MINIO_ROOT_PASSWORD
+          readinessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - test -f /tmp/eventstore.ready
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - find /tmp/eventstore.alive -mmin -2 | grep -q .
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
