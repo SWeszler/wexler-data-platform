@@ -27,3 +27,14 @@ load-eventstore:
 	minikube image load $(EVENTSTORE_IMAGE)
 
 prepare-eventstore: build-eventstore load-eventstore
+
+update-jobs-catalog:
+	@echo "Updating spark-jobs-catalog ConfigMap..."
+	@CM_ARGS=""; \
+	for manifest in jobs/*/sparkapplication.yaml; do \
+		if [ -f "$$manifest" ]; then \
+			job_dir=$$(basename $$(dirname "$$manifest")); \
+			CM_ARGS="$$CM_ARGS --from-file=$$job_dir.yaml=$$manifest"; \
+		fi \
+	done; \
+	kubectl create configmap spark-jobs-catalog --namespace platform $$CM_ARGS -o yaml --dry-run=client | kubectl apply -f -

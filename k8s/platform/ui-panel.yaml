@@ -144,10 +144,18 @@ spec:
         app: ui-panel
     spec:
       serviceAccountName: ui-panel
+      volumes:
+        - name: spark-jobs-catalog
+          configMap:
+            name: spark-jobs-catalog
+            optional: true
       containers:
         - name: ui-panel
-          image: wexler-ui-panel:0.3.5
+          image: wexler-ui-panel:0.3.6
           imagePullPolicy: Never
+          volumeMounts:
+            - name: spark-jobs-catalog
+              mountPath: /app/jobs
           envFrom:
             - configMapRef:
                 name: ui-panel-links
