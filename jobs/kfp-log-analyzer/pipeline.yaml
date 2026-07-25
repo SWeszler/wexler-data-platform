@@ -1,0 +1,84 @@
+apiVersion: pipelines.kubeflow.org/v2beta1
+kind: Pipeline
+metadata:
+  name: log-analyzer-spark-smoke
+  namespace: kubeflow
+spec:
+  description: Run the repository log analyzer through Spark Operator.
+  displayName: Log Analyzer Spark Smoke
+---
+apiVersion: pipelines.kubeflow.org/v2beta1
+kind: PipelineVersion
+metadata:
+  name: log-analyzer-spark-smoke-v1
+  namespace: kubeflow
+spec:
+  description: Run the repository log analyzer through Spark Operator.
+  displayName: Log Analyzer Spark Smoke v1
+  pipelineName: log-analyzer-spark-smoke
+  pipelineSpec:
+    components:
+      comp-launch-log-analyzer:
+        executorLabel: exec-launch-log-analyzer
+        inputDefinitions:
+          parameters:
+            delete_after_success:
+              parameterType: BOOLEAN
+            manifest_json:
+              parameterType: STRING
+            timeout_minutes:
+              parameterType: NUMBER_INTEGER
+        outputDefinitions:
+          parameters:
+            resource_name:
+              parameterType: STRING
+    deploymentSpec:
+      executors:
+        exec-launch-log-analyzer:
+          container:
+            args:
+            - --manifest-json
+            - '{{$.inputs.parameters[''manifest_json'']}}'
+            - --timeout-minutes
+            - '{{$.inputs.parameters[''timeout_minutes'']}}'
+            - --delete-after-success
+            - '{{$.inputs.parameters[''delete_after_success'']}}'
+            - --resource-name-output
+            - '{{$.outputs.parameters[''resource_name''].output_file}}'
+            command:
+            - python
+            - /app/launcher.py
+            image: kfp-spark-launcher:0.1.0
+    pipelineInfo:
+      description: Run the repository log analyzer through Spark Operator.
+      name: log-analyzer-spark-smoke
+    root:
+      dag:
+        tasks:
+          launch-log-analyzer:
+            cachingOptions: {}
+            componentRef:
+              name: comp-launch-log-analyzer
+            inputs:
+              parameters:
+                delete_after_success:
+                  componentInputParameter: delete_after_success
+                manifest_json:
+                  runtimeValue:
+                    constant: '{"apiVersion":"sparkoperator.k8s.io/v1beta2","kind":"SparkApplication","metadata":{"name":"log-analyzer-scala","namespace":"spark"},"spec":{"type":"Scala","mode":"cluster","image":"log-analyzer-scala","imagePullPolicy":"Never","mainClass":"com.example.SessionAnalysis","mainApplicationFile":"local:///app/target/app-assembly-0.1.0-SNAPSHOT.jar","sparkVersion":"3.5.6","restartPolicy":{"type":"Never"},"deps":{"packages":["org.apache.hadoop:hadoop-aws:3.3.4","com.amazonaws:aws-java-sdk-bundle:1.12.262"]},"sparkConf":{"spark.jars.ivy":"/tmp/.ivy2","spark.eventLog.enabled":"true","spark.eventLog.dir":"s3a://warehouse/spark-events","spark.sql.catalogImplementation":"hive","spark.sql.warehouse.dir":"s3a://warehouse/spark-warehouse","spark.hadoop.hive.metastore.uris":"thrift://hive-metastore.data.svc.cluster.local:9083","spark.hadoop.fs.s3a.endpoint":"http://minio.data.svc.cluster.local:9000","spark.hadoop.fs.s3a.path.style.access":"true","spark.hadoop.fs.s3a.connection.ssl.enabled":"false","spark.hadoop.fs.s3a.impl":"org.apache.hadoop.fs.s3a.S3AFileSystem","spark.hadoop.fs.s3a.aws.credentials.provider":"com.amazonaws.auth.EnvironmentVariableCredentialsProvider"},"arguments":["--input","s3a://logs/web_server_logs.txt","--hiveDb","default","--outputBase","s3a://warehouse/output/sessionization"],"driver":{"cores":1,"memory":"1g","serviceAccount":"spark","envSecretKeyRefs":{"AWS_ACCESS_KEY_ID":{"name":"minio-root","key":"MINIO_ROOT_USER"},"AWS_SECRET_ACCESS_KEY":{"name":"minio-root","key":"MINIO_ROOT_PASSWORD"}}},"executor":{"cores":1,"instances":1,"memory":"1g","envSecretKeyRefs":{"AWS_ACCESS_KEY_ID":{"name":"minio-root","key":"MINIO_ROOT_USER"},"AWS_SECRET_ACCESS_KEY":{"name":"minio-root","key":"MINIO_ROOT_PASSWORD"}}}}}'
+                timeout_minutes:
+                  componentInputParameter: timeout_minutes
+            taskInfo:
+              name: launch-log-analyzer
+      inputDefinitions:
+        parameters:
+          delete_after_success:
+            defaultValue: false
+            isOptional: true
+            parameterType: BOOLEAN
+          timeout_minutes:
+            defaultValue: 20.0
+            isOptional: true
+            parameterType: NUMBER_INTEGER
+    schemaVersion: 2.1.0
+    sdkVersion: kfp-2.16.1
