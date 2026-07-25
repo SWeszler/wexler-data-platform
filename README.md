@@ -167,6 +167,40 @@ Local DataGrip connections:
 
 These JDBC URLs use `LoadBalancer` services from `k8s/access/local-jdbc.yaml`. On Minikube, keep `sudo minikube tunnel` running.
 
+## Standalone Kubeflow Pipelines
+
+The repository contains a single-user Kubernetes-native Kubeflow Pipelines
+2.16.1 overlay under `k8s/kubeflow/`. It reuses the platform MinIO service for
+artifacts and does not install the rest of Kubeflow or SeaweedFS.
+
+Run the mandatory compatibility and capacity check before installation:
+
+```bash
+make preflight-kubeflow
+```
+
+The preflight requires at least 10 GiB free in Minikube, verifies the existing
+Spark/MinIO/Hive services and log input, renders the pinned manifests, and
+requires every image to publish `linux/arm64`. KFP 2.16.1 currently publishes
+its control-plane images for `linux/amd64` only, so installation on this ARM64
+Minikube cluster is blocked until compatible images are supplied or an amd64
+cluster is used.
+
+Once preflight passes:
+
+```bash
+make setup-kfp-sdk
+make compile-kfp-pipeline
+make prepare-kfp-launcher
+make install-kubeflow
+kubectl apply -f jobs/kfp-log-analyzer/pipeline.yaml
+make status-kubeflow
+```
+
+Add `127.0.0.1 pipelines.wexler.test` to `/etc/hosts` and keep
+`sudo minikube tunnel` running. The local, unauthenticated UI is available at
+`http://pipelines.wexler.test`.
+
 ## Remote Debugging Spark Jobs with IntelliJ
 
 The UI panel includes a **🐛 Debug Run** button on each Spark job card. It submits the job with JDWP remote-debug agents enabled and `suspend=y`, so the driver and executor JVMs wait for a debugger before executing any application code.
@@ -252,4 +286,3 @@ graph TD
     USER -. "HTTP ingress" .-> SHS
     USER -. "HTTP ingress" .-> PANEL
 ```
-

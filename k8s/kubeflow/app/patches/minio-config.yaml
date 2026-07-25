@@ -1,0 +1,56 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: mlpipeline-minio-artifact
+  namespace: kubeflow
+stringData:
+  accesskey: minioadmin
+  secretkey: minioadmin
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: pipeline-install-config
+  namespace: kubeflow
+data:
+  bucketName: kfp-artifacts
+  cacheImage: busybox:1.36
+  defaultPipelineRoot: s3://kfp-artifacts/v2/artifacts
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: workflow-controller-configmap
+  namespace: kubeflow
+data:
+  artifactRepository: |
+    archiveLogs: true
+    s3:
+      endpoint: minio.data.svc.cluster.local:9000
+      bucket: kfp-artifacts
+      keyFormat: "private-artifacts/{{workflow.namespace}}/{{workflow.name}}/{{workflow.creationTimestamp.Y}}/{{workflow.creationTimestamp.m}}/{{workflow.creationTimestamp.d}}/{{pod.name}}"
+      insecure: true
+      accessKeySecret:
+        name: mlpipeline-minio-artifact
+        key: accesskey
+      secretKeySecret:
+        name: mlpipeline-minio-artifact
+        key: secretkey
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ml-pipeline
+  namespace: kubeflow
+spec:
+  template:
+    spec:
+      containers:
+        - name: ml-pipeline-api-server
+          env:
+            - name: OBJECTSTORECONFIG_HOST
+              value: minio.data.svc.cluster.local
+            - name: OBJECTSTORECONFIG_PORT
+              value: "9000"
+            - name: OBJECTSTORECONFIG_SECURE
+              value: "false"
